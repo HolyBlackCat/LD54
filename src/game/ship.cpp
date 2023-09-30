@@ -1,5 +1,29 @@
 #include "ship.h"
 
+bool DynamicSolidTree::BoxCollisionTest(irect2 box, std::function<bool(const Game::Entity &e)> entity_filter) const
+{
+    return aabb_tree.CollideAabb(box, [&](Tree::NodeIndex node_index)
+    {
+        auto &e = game.get(aabb_tree.GetNodeUserData(node_index));
+        if (entity_filter && !entity_filter(e))
+            return false;
+
+        return e.get<DynamicSolid>().BoxCollisionTest(box);
+    });
+}
+
+bool DynamicSolidTree::ShipBlocksCollisionTest(const ShipPartBlocks &ship, ivec2 ship_offset, std::function<bool(const Game::Entity &e)> entity_filter) const
+{
+    return aabb_tree.CollideAabb(ship.CalculateRect() + ship_offset, [&](Tree::NodeIndex node_index)
+    {
+        auto &e = game.get(aabb_tree.GetNodeUserData(node_index));
+        if (entity_filter && !entity_filter(e))
+            return false;
+
+        return e.get<DynamicSolid>().ShipBlocksCollisionTest(ship, ship_offset);
+    });
+}
+
 void ShipPartBlocks::Tick()
 {
     // std::cout << (map.CollidesWithMap(game.get<MapObject>()->map, pos - game.get<MapObject>()->pos)) << '\n';
@@ -27,6 +51,11 @@ void ShipPartBlocks::Render() const
     // r.itext(pos - game.get<Camera>()->pos + map.cells.size() * ShipGrid::tile_size / 2, Graphics::Text(Fonts::main, FMT("{}", dynamic_cast<const Game::Entity &>(*this).id().get_value()))).align(ivec2(0)).color(fvec3(1,0,0));
 }
 
+void ShipPartPiston::Tick()
+{
+
+}
+
 void ShipPartPiston::Render() const
 {
     constexpr int extra_halfwidth = ShipGrid::tile_size / 2, width = ShipGrid::tile_size * 2, segment_length = ShipGrid::tile_size * 4;
@@ -46,6 +75,9 @@ void ShipPartPiston::Render() const
         if (is_vertical)
             quad.flip_x(is_vertical).matrix(ivec2(0,-1).to_rotation_matrix());
     }
+
+    // ID:
+    // r.itext(last_rect.center() - game.get<Camera>()->pos, Graphics::Text(Fonts::main, FMT("{}", dynamic_cast<const Game::Entity &>(*this).id().get_value()))).align(ivec2(0)).color(fvec3(1,0,0));
 }
 
 void DecomposeToComponentsAndDelete(ShipPartBlocks &self)
@@ -117,6 +149,16 @@ void DecomposeToComponentsAndDelete(ShipPartBlocks &self)
 
                         elem.block_b = &new_part;
                         elem.abs_pixel_pos_b = abs_tile_pos * ShipGrid::tile_size + self.pos;
+
+                        // Make sure A and B are ordered top-left to bottom-right.
+                        if (elem.abs_pixel_pos_a[elem.is_vertical] > elem.abs_pixel_pos_b[elem.is_vertical])
+                        {
+                            std::swap(elem.block_a, elem.block_b);
+                            std::swap(elem.abs_pixel_pos_a, elem.abs_pixel_pos_b);
+
+                            elem.abs_pixel_pos_a[elem.is_vertical] += ShipGrid::tile_size;
+                            elem.abs_pixel_pos_b[elem.is_vertical] += ShipGrid::tile_size;
+                        }
                     }
                 }
 
@@ -124,14 +166,16 @@ void DecomposeToComponentsAndDelete(ShipPartBlocks &self)
                 if (ShipGrid::GetTileInfo(this_tile).piston == ShipGrid::PistonRelation::solid_attachable)
                 {
                     for (const bool is_vertical : {false, true})
+                    for (const bool is_backward : {false, true})
                     {
                         const ShipGrid::Tile piston_tile_type = is_vertical ? ShipGrid::Tile::piston_v : ShipGrid::Tile::piston_h;
+                        const ivec2 step = ivec2::axis(is_vertical, is_backward ? -1 : 1);
 
                         ivec2 piston_tile_pos = abs_tile_pos;
 
                         while (true)
                         {
-                            ivec2 new_pos = piston_tile_pos + ivec2::axis(is_vertical);
+                            ivec2 new_pos = piston_tile_pos + step;
                             if (!self.map.cells.bounds().contains(new_pos) || self.map.cells.safe_nonthrowing_at(new_pos).tile != piston_tile_type)
                                 break;
                             piston_tile_pos = new_pos;
@@ -139,7 +183,7 @@ void DecomposeToComponentsAndDelete(ShipPartBlocks &self)
 
                         if (piston_tile_pos != abs_tile_pos)
                         {
-                            ivec2 end_tile_pos = piston_tile_pos + ivec2::axis(is_vertical);
+                            ivec2 end_tile_pos = piston_tile_pos + step;
                             if (
                                 self.map.cells.bounds().contains(end_tile_pos) &&
                                 ShipGrid::GetTileInfo(self.map.cells.safe_nonthrowing_at(end_tile_pos).tile).piston == ShipGrid::PistonRelation::solid_attachable &&
@@ -149,7 +193,7 @@ void DecomposeToComponentsAndDelete(ShipPartBlocks &self)
                                 queued_pistons[end_tile_pos].push_back({
                                     .is_vertical = is_vertical,
                                     .block_a = &new_part,
-                                    .abs_pixel_pos_a = (abs_tile_pos + ivec2::axis(is_vertical)) * ShipGrid::tile_size + self.pos,
+                                    .abs_pixel_pos_a = (abs_tile_pos + step) * ShipGrid::tile_size + self.pos,
                                 });
                             }
                         }
@@ -162,6 +206,8 @@ void DecomposeToComponentsAndDelete(ShipPartBlocks &self)
             lambda(lambda, tile_pos);
 
             new_part.pos = self.pos + new_part_tile_offset * ShipGrid::tile_size;
+
+            new_part.UpdateAabb();
         }
     }
 
@@ -178,13 +224,14 @@ void DecomposeToComponentsAndDelete(ShipPartBlocks &self)
             new_piston.is_vertical = elem.is_vertical;
             new_piston.pos_relative_to_a = elem.abs_pixel_pos_a - elem.block_a->pos;
             new_piston.pos_relative_to_b = elem.abs_pixel_pos_b - elem.block_b->pos;
+            new_piston.UpdateAabb();
         }
     }
 
     game.destroy(self);
 }
 
-[[nodiscard]] ConnectedShipParts FindConnectedShipParts(std::variant<ShipPartBlocks *, ShipPartPiston *> blocks_or_piston, std::optional<bool> skip_piston_direction)
+ConnectedShipParts FindConnectedShipParts(std::variant<ShipPartBlocks *, ShipPartPiston *> blocks_or_piston, std::optional<bool> skip_piston_direction)
 {
     ConnectedShipParts ret;
 
@@ -192,53 +239,61 @@ void DecomposeToComponentsAndDelete(ShipPartBlocks &self)
     ShipPartPiston *half_skipped_piston = nullptr;
 
     // `prev_piston` is null if this is the first block.
-    auto HandleBlocks = [&](auto &HandleBlocks, auto &HandlePiston, ShipPartBlocks &blocks, ShipPartPiston *prev_piston) -> void
+    auto HandleBlocks = [&](auto &HandleBlocks, auto &HandlePiston, ShipPartBlocks &blocks, Game::Id blocks_id, ShipPartPiston *prev_piston) -> void
     {
         if (!ret.blocks.insert(&blocks).second)
             return;
+        ret.entity_ids.insert(blocks_id);
 
         for (const auto &elem : game.get_links<"pistons">(blocks))
         {
             auto &piston = game.get(elem.id()).get<ShipPartPiston>();
             if (&piston == prev_piston)
                 continue;
-            HandlePiston(HandleBlocks, HandlePiston, piston, &blocks);
+            HandlePiston(HandleBlocks, HandlePiston, piston, elem.id(), &blocks);
             if (ret.cant_skip_because_of_cycle)
                 return;
         }
     };
     // `prev_blocks` is null if this is the first piston.
-    auto HandlePiston = [&](auto &HandleBlocks, auto &HandlePiston, ShipPartPiston &piston, ShipPartBlocks *prev_blocks) -> void
+    auto HandlePiston = [&](auto &HandleBlocks, auto &HandlePiston, ShipPartPiston &piston, Game::Id piston_id, ShipPartBlocks *prev_blocks) -> void
     {
         // We don't check the result here, it shouldn't be necessary.
         // It also lets us check for piston cycles when `skip_piston_direction` is non-null below.
         ret.pistons.insert(&piston);
+        ret.entity_ids.insert(piston_id);
 
         if (prev_blocks || !skip_piston_direction || skip_piston_direction.value() != false)
-        if (auto &blocks = game.get_link<"a">(piston).get<ShipPartBlocks>(); &blocks != prev_blocks)
         {
-            if (prev_blocks && half_skipped_piston == &piston && skip_piston_direction.value() == true)
+            auto &blocks_entity = game.get_link<"a">(piston);
+            if (auto &blocks = blocks_entity.get<ShipPartBlocks>(); &blocks != prev_blocks)
             {
-                ret.cant_skip_because_of_cycle = true;
-                return;
-            }
+                if (prev_blocks && half_skipped_piston == &piston && skip_piston_direction.value() == true)
+                {
+                    ret.cant_skip_because_of_cycle = true;
+                    return;
+                }
 
-            HandleBlocks(HandleBlocks, HandlePiston, blocks, &piston);
-            if (ret.cant_skip_because_of_cycle)
-                return;
+                HandleBlocks(HandleBlocks, HandlePiston, blocks, blocks_entity.id(), &piston);
+                if (ret.cant_skip_because_of_cycle)
+                    return;
+            }
         }
         if (prev_blocks || !skip_piston_direction || skip_piston_direction.value() != true)
-        if (auto &blocks = game.get_link<"b">(piston).get<ShipPartBlocks>(); &blocks != prev_blocks)
         {
-            if (prev_blocks && half_skipped_piston == &piston && skip_piston_direction.value() == false)
+            auto &blocks_entity = game.get_link<"b">(piston);
+            if (auto &blocks = blocks_entity.get<ShipPartBlocks>(); &blocks != prev_blocks)
             {
-                ret.cant_skip_because_of_cycle = true;
-                return;
-            }
+                if (prev_blocks && half_skipped_piston == &piston && skip_piston_direction.value() == false)
+                {
+                    ret.cant_skip_because_of_cycle = true;
+                    return;
+                }
 
-            HandleBlocks(HandleBlocks, HandlePiston, blocks, &piston);
-            if (ret.cant_skip_because_of_cycle)
-                return;
+                HandleBlocks(HandleBlocks, HandlePiston, blocks, blocks_entity.id(), &piston);
+                if (ret.cant_skip_because_of_cycle)
+                    return;
+            }
         }
     };
 
@@ -246,15 +301,51 @@ void DecomposeToComponentsAndDelete(ShipPartBlocks &self)
         [&](ShipPartBlocks *blocks)
         {
             ASSERT(!skip_piston_direction, "Can't specify `skip_piston_direction` when starting from `ShipPartBlocks`.");
-            HandleBlocks(HandleBlocks, HandlePiston, *blocks, nullptr);
+            HandleBlocks(HandleBlocks, HandlePiston, *blocks, dynamic_cast<Game::Entity &>(*blocks).id(), nullptr);
         },
         [&](ShipPartPiston *piston)
         {
             if (skip_piston_direction)
                 half_skipped_piston = piston;
-            HandlePiston(HandleBlocks, HandlePiston, *piston, nullptr);
+            HandlePiston(HandleBlocks, HandlePiston, *piston, dynamic_cast<Game::Entity &>(*piston).id(), nullptr);
         },
     }, blocks_or_piston);
 
     return ret;
+}
+
+bool CollideShipParts(const ConnectedShipParts &parts, ivec2 offset, const MapObject *map, const DynamicSolidTree *tree, std::function<bool(const Game::Entity &e)> entity_filter)
+{
+    for (const auto &blocks : parts.blocks)
+    {
+        if (map && blocks->map.CollidesWithMap(map->map, blocks->pos + offset - map->pos))
+            return true;
+
+        if (tree && tree->ShipBlocksCollisionTest(*blocks, offset, entity_filter))
+            return true;
+    }
+
+    for (const auto &piston : parts.pistons)
+    {
+        if (map && map->map.CollidesWithBox(piston->last_rect + offset - map->pos))
+            return true;
+
+        if (tree && tree->BoxCollisionTest(piston->last_rect + offset, entity_filter))
+            return true;
+    }
+
+    return false;
+}
+
+void MoveShipParts(const ConnectedShipParts &parts, ivec2 offset)
+{
+    for (const auto &blocks : parts.blocks)
+    {
+        blocks->pos += offset;
+        blocks->UpdateAabb();
+    }
+
+    // Pistons don't store their position (other than in AABB), so it doesn't need to be updated.
+    for (const auto &piston : parts.pistons)
+        piston->UpdateAabb();
 }

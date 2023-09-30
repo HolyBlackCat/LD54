@@ -432,6 +432,13 @@ namespace Ent
 
     namespace impl
     {
+        // We use this to detect what types are entity IDs, to specialize `std::hash` for them.
+        template <typename Tag>
+        struct EntityIdBase {};
+
+        template <typename Tag>
+        constexpr void CheckEntityIdBase(const EntityIdBase<Tag> &) {}
+
         // The default tag implementation. This is ultimately a CRTP base.
         template <typename Tag>
         struct DefaultTag
@@ -451,7 +458,7 @@ namespace Ent
             using entity_id_underlying_t = unsigned int;
 
             // Stores unique entity IDs. Those are never reused.
-            class Id
+            class Id : public EntityIdBase<Tag>
             {
                 friend Entity;
                 typename Tag::entity_id_underlying_t value = 0; // Actual IDs are always >0.
@@ -460,7 +467,9 @@ namespace Ent
                 constexpr Id() {}
                 constexpr Id(std::nullptr_t) {}
 
-                friend constexpr auto operator<=>(const Id &, const Id &) = default;
+                // `<=> = default` for some reason doesn't work here.
+                friend constexpr std::strong_ordering operator<=>(const Id &a, const Id &b) {return a.value <=> b.value;}
+                friend constexpr bool operator==(const Id &a, const Id &b) {return a.value == b.value;}
 
                 // This is a named function, as opposed to `operator bool`, because it doesn't guarantee that the ID is valid.
                 // Use `controller.valid(id)` for that (from `Mixins::GlobalEntityLists`).
@@ -753,7 +762,27 @@ namespace Ent
     {
         // See `impl::DefaultTag` for the default members.
     };
+
+
+    // Some low-level concepts:
+
+    // Whether `T` is a `SomeTag::Id`.
+    template <typename T>
+    concept EntityIdTypeForAnyTag = requires(const T &t){impl::CheckEntityIdBase(t);};
 }
+
+
+// `std` specializations:
+
+template <Ent::EntityIdTypeForAnyTag T>
+struct std::hash<T>
+{
+    std::size_t operator()(const T &id) const noexcept
+    {
+        auto value = id.get_value();
+        return std::hash<decltype(value)>{}(value);
+    }
+};
 
 
 // Component macros:

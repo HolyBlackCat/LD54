@@ -1,5 +1,6 @@
 #pragma once
 
+#include "game/entities.h"
 #include "game/main.h"
 #include "gameutils/tiled_map.h"
 #include "utils/json.h"
@@ -231,13 +232,21 @@ class Map
         }
     }
 
-    [[nodiscard]] bool PointIsSolid(ivec2 point) const
+    [[nodiscard]] bool CollidesWithPoint(ivec2 point) const
     {
         ivec2 tile_pos = div_ex(point, Grid::tile_size);
         if (!cells.bounds().contains(tile_pos))
             return false;
 
         return Grid::GetTileInfo(cells.safe_nonthrowing_at(tile_pos).tile).solid;
+    }
+
+    [[nodiscard]] bool CollidesWithBox(irect2 box) const
+    {
+        return Math::for_each_cuboid_point(box.a, box.b - 1, ivec2(Grid::tile_size), nullptr, [&](ivec2 point)
+        {
+            return CollidesWithPoint(point);
+        });
     }
 
     template <typename OtherGrid>
@@ -264,11 +273,27 @@ class Map
 
                 for (ivec2 point : (tile_pos * Grid::tile_size + self_relative_pos).rect_size(Grid::tile_size - 1).to_contour())
                 {
-                    if (other.PointIsSolid(point))
+                    if (other.CollidesWithPoint(point))
                         return true;
                 }
             }
             return false;
         }
+    }
+};
+
+struct MapObject : PreRenderable
+{
+    IMP_STANDALONE_COMPONENT(Game)
+
+    ivec2 pos;
+    Map<WorldGrid> map;
+
+    MapObject() {}
+    MapObject(Stream::Input input) : map(std::move(input)) {}
+
+    void PreRender() const override
+    {
+        map.Render<TileDrawMethods::RenderMode::normal>(game.get<Camera>()->pos - pos);
     }
 };
