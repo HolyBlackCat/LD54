@@ -111,7 +111,7 @@ struct ShipPartBlocks :
 
 struct ShipPartPiston :
     Tickable, DynamicSolid,
-    Renderable,
+    Renderable, PreRenderable,
     BasicShipPart,
     Game::LinkOne<"a">, Game::LinkOne<"b">
 {
@@ -123,6 +123,9 @@ struct ShipPartPiston :
     ivec2 pos_relative_to_b; // The top/left end of the EDGE attaching this to B.
 
     irect2 last_rect;
+
+    // This oscilates when moving, to determine which side to move next.
+    bool dir_flip_flop = false;
 
     irect2 CalculateRect() const
     {
@@ -138,6 +141,10 @@ struct ShipPartPiston :
         SetAabb(last_rect);
     }
 
+    // Returns distance to `point`, with some metric suitable for picking pistons with mouse.
+    // Currently this uses 8-way distance.
+    [[nodiscard]] int DistanceToPoint(ivec2 point) const;
+
     bool BoxCollisionTest(irect2 box) const override
     {
         return last_rect.touches(box);
@@ -148,7 +155,20 @@ struct ShipPartPiston :
         return ship.map.CollidesWithBox(last_rect - ship.pos - ship_offset);
     }
 
+    enum class ExtendRetractStatus
+    {
+        ok, // Successfully changed length.
+        stuck, // Can't move, something solid is interfering.
+        at_min_length, // Can't move, already at minimal length.
+    };
+    // Try to extend or retract the piston by one pixel.
+    // If `gravity_tweaks` is true, assume that gravity is present and apply some tweaks for that.
+    ExtendRetractStatus ExtendOrRetract(bool extend, bool gravity_tweaks);
+
     void Tick() override;
+
+    void RenderLow(bool pre) const;
+    void PreRender() const override;
     void Render() const override;
 };
 
@@ -166,6 +186,7 @@ struct ConnectedShipParts
     phmap::flat_hash_set<ShipPartPiston *> pistons;
 
     // The ids of all entities from `blocks` and `pistons`.
+    // Note that the user can desync those. This variable is only used by the lambda below.
     phmap::flat_hash_set<Game::Id> entity_ids;
 
     // Returns a predicate on `Game::Entity &` that tests that it's not in `entity_ids`.

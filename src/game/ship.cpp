@@ -51,12 +51,93 @@ void ShipPartBlocks::Render() const
     // r.itext(pos - game.get<Camera>()->pos + map.cells.size() * ShipGrid::tile_size / 2, Graphics::Text(Fonts::main, FMT("{}", dynamic_cast<const Game::Entity &>(*this).id().get_value()))).align(ivec2(0)).color(fvec3(1,0,0));
 }
 
+int ShipPartPiston::DistanceToPoint(ivec2 point) const
+{
+    ivec2 a = game.get_link<"a">(*this).get<ShipPartBlocks>().pos + pos_relative_to_a + ivec2::axis(!is_vertical, ShipGrid::tile_size / 2);
+    int relative_pos = point[is_vertical] - a[is_vertical];
+    int length = game.get_link<"b">(*this).get<ShipPartBlocks>().pos[is_vertical] + pos_relative_to_b[is_vertical] - a[is_vertical];
+
+    int ret = clamp_min(abs(point[!is_vertical] - a[!is_vertical]) - ShipGrid::tile_size / 2);
+    if (relative_pos < 0)
+        clamp_var_min(ret, -relative_pos);
+
+    if (relative_pos > length)
+        clamp_var_min(ret, relative_pos - length);
+
+    return ret;
+}
+
+ShipPartPiston::ExtendRetractStatus ShipPartPiston::ExtendOrRetract(bool extend, bool gravity_tweaks)
+{
+    constexpr int min_length = ShipGrid::tile_size;
+
+    int current_length = (game.get_link<"b">(*this).get<ShipPartBlocks>().pos[is_vertical] + pos_relative_to_b[is_vertical])
+        - (game.get_link<"a">(*this).get<ShipPartBlocks>().pos[is_vertical] + pos_relative_to_a[is_vertical]);
+
+    if (!extend && current_length <= min_length)
+        return ExtendRetractStatus::at_min_length; // At minimal length.
+
+    ConnectedShipParts parts_a = FindConnectedShipParts(this, true);
+    ConnectedShipParts parts_b = FindConnectedShipParts(this, false);
+
+    // Those don't touch `entity_ids`, which is exactly what we want here.
+    parts_a.pistons.erase(this);
+    parts_b.pistons.erase(this);
+
+    auto map = game.get<MapObject>().get_opt();
+    auto tree = game.get<DynamicSolidTree>().get_opt();
+
+    ivec2 offset_a = ivec2::axis(is_vertical, extend ? -1 : 1);
+    ivec2 offset_b = ivec2::axis(is_vertical, extend ? 1 : -1);
+
+    bool can_move_a = !CollideShipParts(parts_a, offset_a, map, tree, parts_a.LambdaNoSuchEntityHere());
+    bool can_move_b = !CollideShipParts(parts_b, offset_b, map, tree, parts_b.LambdaNoSuchEntityHere());
+
+    bool ground_a = false;
+    bool ground_b = false;
+
+    if (gravity_tweaks)
+    {
+        ivec2 gravity(0,1);
+
+        // Need the same lambda for both.
+        // Imagine if A rubs the ground, but B rubs only A. If the lambdas were different,
+        // they'd both have ground flags, which is wrong. Only A should have it in this case.
+        auto lambda = [a = parts_a.LambdaNoSuchEntityHere(), b = parts_b.LambdaNoSuchEntityHere()](const Game::Entity &e)
+        {
+            return a(e) && b(e);
+        };
+        ground_a = offset_a == gravity ? !can_move_a : CollideShipParts(parts_a, gravity, map, tree, lambda);
+        ground_b = offset_b == gravity ? !can_move_b : CollideShipParts(parts_b, gravity, map, tree, lambda);
+    }
+
+    if (!can_move_a && !can_move_b)
+        return ExtendRetractStatus::stuck;
+
+    bool move_b = !can_move_a || (can_move_b && (ground_a > ground_b || (ground_a == ground_b && dir_flip_flop)));
+    dir_flip_flop = !dir_flip_flop;
+
+    // Force move A when B sits on the floor.
+    if (is_vertical && !extend && CollideShipParts(parts_b, -offset_b, map, tree, parts_b.LambdaNoSuchEntityHere()))
+        move_b = false;
+
+    if (move_b)
+        MoveShipParts(parts_b, offset_b);
+    else
+        MoveShipParts(parts_a, offset_a);
+
+    // We exclude this piston from `parts_{a,b}`, so we need to manually update it.
+    UpdateAabb();
+
+    return ExtendRetractStatus::ok;
+}
+
 void ShipPartPiston::Tick()
 {
 
 }
 
-void ShipPartPiston::Render() const
+void ShipPartPiston::RenderLow(bool pre) const
 {
     constexpr int extra_halfwidth = ShipGrid::tile_size / 2, width = ShipGrid::tile_size * 2, segment_length = ShipGrid::tile_size * 4;
 
@@ -71,13 +152,23 @@ void ShipPartPiston::Render() const
         ivec2 sprite_size(clamp_max(segment_length, remaining_pixel_len), width);
         remaining_pixel_len -= segment_length;
 
-        auto quad = r.iquad(pos_a + ivec2::axis(is_vertical, segment_length * i), "ship_tiles"_image with(= (_.a + ivec2(1,2) * ShipGrid::tile_size).rect_size(sprite_size))).pixel_center(fvec2{});
+        auto quad = r.iquad(pos_a + ivec2::axis(is_vertical, segment_length * i),
+            "ship_tiles"_image with(= (_.a + ivec2(1,2) * ShipGrid::tile_size + ivec2(segment_length * pre, 0)).rect_size(sprite_size))).pixel_center(fvec2{});
         if (is_vertical)
             quad.flip_x(is_vertical).matrix(ivec2(0,-1).to_rotation_matrix());
     }
 
     // ID:
     // r.itext(last_rect.center() - game.get<Camera>()->pos, Graphics::Text(Fonts::main, FMT("{}", dynamic_cast<const Game::Entity &>(*this).id().get_value()))).align(ivec2(0)).color(fvec3(1,0,0));
+}
+
+void ShipPartPiston::PreRender() const
+{
+    RenderLow(true);
+}
+void ShipPartPiston::Render() const
+{
+    RenderLow(false);
 }
 
 void DecomposeToComponentsAndDelete(ShipPartBlocks &self)

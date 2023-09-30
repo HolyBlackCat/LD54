@@ -24,6 +24,14 @@ struct Tickable
 };
 using AllTickable = Game::Category<Ent::OrderedList, Tickable>;
 
+struct PreRenderable
+{
+    IMP_COMPONENT(Game)
+
+    virtual void PreRender() const = 0;
+};
+using AllPreRenderable = Game::Category<Ent::OrderedList, PreRenderable>;
+
 struct Renderable
 {
     IMP_COMPONENT(Game)
@@ -32,10 +40,10 @@ struct Renderable
 };
 using AllRenderable = Game::Category<Ent::OrderedList, Renderable>;
 
-struct PreRenderable
+struct GuiRenderable
 {
     IMP_COMPONENT(Game)
 
-    virtual void PreRender() const = 0;
+    virtual void GuiRender() const = 0;
 };
-using AllPreRenderable = Game::Category<Ent::OrderedList, PreRenderable>;
+using AllGuiRenderable = Game::Category<Ent::OrderedList, GuiRenderable>;
