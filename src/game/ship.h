@@ -9,7 +9,7 @@ struct BasicShipPart
     virtual ~BasicShipPart() = default;
 };
 
-struct ShipPartBlocks : Tickable, Renderable, BasicShipPart, Game::LinkMany<"pistons">
+struct ShipPartBlocks : Tickable, Renderable, PreRenderable, BasicShipPart, Game::LinkMany<"pistons">
 {
     IMP_STANDALONE_COMPONENT(Game)
 
@@ -17,6 +17,7 @@ struct ShipPartBlocks : Tickable, Renderable, BasicShipPart, Game::LinkMany<"pis
     Map<ShipGrid> map;
 
     void Tick() override;
+    void PreRender() const override;
     void Render() const override;
 };
 

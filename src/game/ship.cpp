@@ -5,12 +5,23 @@ void ShipPartBlocks::Tick()
     // std::cout << (map.CollidesWithMap(game.get<MapObject>()->map, pos - game.get<MapObject>()->pos)) << '\n';
 }
 
+void ShipPartBlocks::PreRender() const
+{
+    // Bounding box:
+    // r.iquad(pos - game.get<Camera>()->pos, map.cells.size() * ShipGrid::tile_size).color(fvec3(0)).alpha(0.1f);
+
+    map.Render<TileDrawMethods::RenderMode::pre>(game.get<Camera>()->pos - pos);
+
+    // ID:
+    // r.itext(pos - game.get<Camera>()->pos + map.cells.size() * ShipGrid::tile_size / 2, Graphics::Text(Fonts::main, FMT("{}", dynamic_cast<const Game::Entity &>(*this).id().get_value()))).align(ivec2(0)).color(fvec3(1,0,0));
+}
+
 void ShipPartBlocks::Render() const
 {
     // Bounding box:
     // r.iquad(pos - game.get<Camera>()->pos, map.cells.size() * ShipGrid::tile_size).color(fvec3(0)).alpha(0.1f);
 
-    map.Render(game.get<Camera>()->pos - pos);
+    map.Render<TileDrawMethods::RenderMode::normal>(game.get<Camera>()->pos - pos);
 
     // ID:
     // r.itext(pos - game.get<Camera>()->pos + map.cells.size() * ShipGrid::tile_size / 2, Graphics::Text(Fonts::main, FMT("{}", dynamic_cast<const Game::Entity &>(*this).id().get_value()))).align(ivec2(0)).color(fvec3(1,0,0));
@@ -31,7 +42,7 @@ void ShipPartPiston::Render() const
         ivec2 sprite_size(clamp_max(segment_length, remaining_pixel_len), width);
         remaining_pixel_len -= segment_length;
 
-        auto quad = r.iquad(pos_a + sprite_size with(; if (is_vertical) std::swap(_.x, _.y)) / 2 + ivec2::axis(is_vertical, segment_length * i), "ship_tiles"_image with(= (_.a + ivec2(1,1) * ShipGrid::tile_size).rect_size(sprite_size))).center();
+        auto quad = r.iquad(pos_a + ivec2::axis(is_vertical, segment_length * i), "ship_tiles"_image with(= (_.a + ivec2(1,2) * ShipGrid::tile_size).rect_size(sprite_size))).pixel_center(fvec2{});
         if (is_vertical)
             quad.flip_x(is_vertical).matrix(ivec2(0,-1).to_rotation_matrix());
     }

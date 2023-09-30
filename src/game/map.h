@@ -11,6 +11,22 @@ namespace TileDrawMethods
     struct Invis {};
     // Just a single tile.
     struct SimpleTile {ivec2 tex;};
+
+    // Not a method, used to describe a dual grid pass.
+    template <typename Data>
+    struct DualGridPass
+    {
+        typename Data::Tile tile{};
+        ivec2 tex;
+        float alpha = 1;
+    };
+
+    // This is passed to `Map::Render()`.
+    enum class RenderMode
+    {
+        pre,
+        normal,
+    };
 }
 
 template <typename Data>
@@ -30,6 +46,8 @@ class BasicGrid : public Data
   public:
     BasicGrid() = delete;
     ~BasicGrid() = delete;
+
+    using data_t = Data;
 
     [[nodiscard]] static const Data::TileInfo &GetTileInfo(Data::Tile tile)
     {
@@ -98,7 +116,9 @@ struct ShipGridData
 
     static const Graphics::Region &GetImage() {return "ship_tiles"_image;}
     static auto GetRawTileInfoArray() -> std::array<TileInfo, std::to_underlying(Tile::_count)>;
-    static constexpr std::pair<Tile, ivec2> dual_grid_passes[] = {{Tile::block, ivec2(0,0)}};
+
+    static constexpr TileDrawMethods::DualGridPass<ShipGridData> dual_grid_passes[] = {{.tile = Tile::block, .tex = ivec2(0,0), .alpha = 1}};
+    static constexpr TileDrawMethods::DualGridPass<ShipGridData> dual_grid_pre_passes[] = {{.tile = Tile::block, .tex = ivec2(0,1), .alpha = 1}};
 };
 using ShipGrid = BasicGrid<ShipGridData>;
 
@@ -138,6 +158,7 @@ class Map
         }
     }
 
+    template <TileDrawMethods::RenderMode Mode>
     void Render(ivec2 camera_pos) const
     {
         if (!cells.bounds().has_area())
@@ -145,15 +166,21 @@ class Map
 
         const auto &image = Grid::GetImage();
 
-        if constexpr (requires{Grid::dual_grid_passes;})
+        if constexpr (Mode == TileDrawMethods::RenderMode::pre ? requires{Grid::dual_grid_pre_passes;} : requires{Grid::dual_grid_passes;})
         {
+            std::span<const TileDrawMethods::DualGridPass<typename Grid::data_t>> passes;
+            if constexpr (Mode == TileDrawMethods::RenderMode::pre)
+                passes = Grid::dual_grid_pre_passes;
+            else
+                passes = Grid::dual_grid_passes;
+
             ivec2 a = div_ex(camera_pos - screen_size / 2 - Grid::tile_size / 2, Grid::tile_size);
             ivec2 b = div_ex(camera_pos + screen_size / 2 + Grid::tile_size / 2, Grid::tile_size);
 
             clamp_var_min(a, -1);
             clamp_var_max(b, cells.size());
 
-            for (const auto [pass_tile, pass_tex] : Grid::dual_grid_passes)
+            for (const auto &pass : passes)
             {
                 for (ivec2 tile_pos : a <= vector_range </*sic*/ b)
                 {
@@ -163,7 +190,7 @@ class Map
                     {
                         ivec2 point = tile_pos + offset;
                         if (cells.bounds().contains(point))
-                            return cells.safe_nonthrowing_at(point).tile == pass_tile;
+                            return cells.safe_nonthrowing_at(point).tile == pass.tile;
                         else
                             return false;
                     };
@@ -172,32 +199,35 @@ class Map
                     if (index == 0)
                         continue;
 
-                    r.iquad(pixel_pos, image with(= (_.a + Grid::tile_size * (pass_tex + ivec2(index - 1, 0))).rect_size(Grid::tile_size)));
+                    r.iquad(pixel_pos, image with(= (_.a + Grid::tile_size * (pass.tex + ivec2(index - 1, 0))).rect_size(Grid::tile_size))).alpha(pass.alpha);
                 }
             }
         }
 
-        ivec2 a = div_ex(camera_pos - screen_size / 2, Grid::tile_size);
-        ivec2 b = div_ex(camera_pos + screen_size / 2, Grid::tile_size);
-        clamp_var_min(a, 0);
-        clamp_var_max(b, cells.size() - 1);
-
-        for (ivec2 tile_pos : a <= vector_range <= b)
+        if constexpr (Mode == TileDrawMethods::RenderMode::normal)
         {
-            const Cell &cell = cells.safe_nonthrowing_at(tile_pos);
-            const typename Grid::TileInfo &info = Grid::GetTileInfo(cell.tile);
-            if (std::holds_alternative<TileDrawMethods::Invis>(info.draw))
-                continue;
+            ivec2 a = div_ex(camera_pos - screen_size / 2, Grid::tile_size);
+            ivec2 b = div_ex(camera_pos + screen_size / 2, Grid::tile_size);
+            clamp_var_min(a, 0);
+            clamp_var_max(b, cells.size() - 1);
 
-            ivec2 pixel_pos = tile_pos * Grid::tile_size - camera_pos;
+            for (ivec2 tile_pos : a <= vector_range <= b)
+            {
+                const Cell &cell = cells.safe_nonthrowing_at(tile_pos);
+                const typename Grid::TileInfo &info = Grid::GetTileInfo(cell.tile);
+                if (std::holds_alternative<TileDrawMethods::Invis>(info.draw))
+                    continue;
 
-            std::visit(Meta::overload{
-                [&](const TileDrawMethods::Invis &) {},
-                [&](const TileDrawMethods::SimpleTile &draw)
-                {
-                    r.iquad(pixel_pos, image with(= _.a + (draw.tex * Grid::tile_size).rect_size(Grid::tile_size)));
-                },
-            }, info.draw);
+                ivec2 pixel_pos = tile_pos * Grid::tile_size - camera_pos;
+
+                std::visit(Meta::overload{
+                    [&](const TileDrawMethods::Invis &) {},
+                    [&](const TileDrawMethods::SimpleTile &draw)
+                    {
+                        r.iquad(pixel_pos, image with(= _.a + (draw.tex * Grid::tile_size).rect_size(Grid::tile_size)));
+                    },
+                }, info.draw);
+            }
         }
     }
 

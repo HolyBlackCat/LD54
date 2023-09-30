@@ -64,6 +64,8 @@ namespace States
 
             r.iquad(ivec2(), screen_size).center().color(fvec3(0.6f));
 
+            for (auto &e : game.get<AllPreRenderable>())
+                e.get<PreRenderable>().PreRender();
             for (auto &e : game.get<AllRenderable>())
                 e.get<Renderable>().Render();
 

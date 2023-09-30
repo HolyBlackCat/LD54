@@ -31,3 +31,11 @@ struct Renderable
     virtual void Render() const = 0;
 };
 using AllRenderable = Game::Category<Ent::OrderedList, Renderable>;
+
+struct PreRenderable
+{
+    IMP_COMPONENT(Game)
+
+    virtual void PreRender() const = 0;
+};
+using AllPreRenderable = Game::Category<Ent::OrderedList, PreRenderable>;
