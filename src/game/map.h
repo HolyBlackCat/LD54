@@ -72,7 +72,17 @@ struct ShipGridData
     {
         air,
         block,
+        piston_h, // Those are only used temporarily, until the ship is split into sections.
+        piston_v, // Then pistons become entities.
         _count [[maybe_unused]]
+    };
+
+    enum class PistonRelation
+    {
+        empty, // Empty space.
+        solid_attachable, // A solid block.
+        solid_non_attachable, // A solid block, but you can't attach a piston to it.
+        piston, // A piston.
     };
 
     struct TileInfo
@@ -82,6 +92,8 @@ struct ShipGridData
         Tile tile = Tile::air;
         bool solid = false;
         DrawMethod draw;
+
+        PistonRelation piston{};
     };
 
     static const Graphics::Region &GetImage() {return "ship_tiles"_image;}
