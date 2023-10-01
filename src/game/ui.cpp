@@ -49,7 +49,16 @@ bool PistonMouseController::MouseFocusTick()
 
         if (control)
         {
-            active_piston.ExtendOrRetract(control > 0, 400);
+            auto status = active_piston.ExtendOrRetract(control > 0, 400);
+            if (ShipPartPiston::ExtendOrRetractWasSuccessful(status))
+            {
+                now_moved_once = true;
+            }
+            else if (now_moved_once)
+            {
+                now_moved_once = false;
+                audio.Play("piston_limit"_sound, 1, ra.f.abs() <= 0.3f);
+            }
 
             for (auto &tooltip : game.get<Game::Category<Ent::UnorderedList, Tooltip>>())
             {

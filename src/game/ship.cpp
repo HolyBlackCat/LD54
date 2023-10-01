@@ -643,6 +643,9 @@ void MoveShipsByGravity(ivec2 dir, float acc, float max_speed, DynamicSolidTree:
             }
             else
             {
+                if (blocks.gravity.speed > 1)
+                    audio.Play("block_lands"_sound, 1, ra.f.abs() <= 0.3f);
+
                 blocks.gravity.speed = 0;
                 blocks.gravity.speed_comp = 0;
             }

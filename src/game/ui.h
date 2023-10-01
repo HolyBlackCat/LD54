@@ -17,6 +17,9 @@ struct PistonMouseController : MouseFocusTickable, GuiRenderable
 
     float anim_timer = 0;
 
+    // If moved at least once during this click.
+    bool now_moved_once = false;
+
     bool MouseFocusTick() override;
     void GuiRender() const override;
 };

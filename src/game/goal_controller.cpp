@@ -42,7 +42,10 @@ void GoalController::Tick()
         }
 
         if (ok)
+        {
             fading_out = true;
+            audio.Play("level_transition"_sound, 1, ra.f.abs() <= 0.2f);
+        }
     }
 
     // Check goal bricks falling out.
