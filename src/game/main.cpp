@@ -1,7 +1,7 @@
 #include "main.h"
 
 const ivec2 screen_size = ivec2(480, 270);
-const std::string_view window_name = "LD54";
+const std::string_view window_name = "Micromachines";
 
 Interface::Window window(std::string(window_name), screen_size * 2, Interface::windowed, adjust_(Interface::WindowSettings{}, .min_size = screen_size));
 static Graphics::DummyVertexArray dummy_vao = nullptr;
@@ -49,7 +49,8 @@ struct Application : Program::DefaultBasicState
     void EndFrame() override
     {
         fps_counter.Update();
-        window.SetTitle(STR((window_name), " TPS:", (fps_counter.Tps()), " FPS:", (fps_counter.Fps()), " SOUNDS:", (audio.ActiveSources())));
+        if (!IMP_PLATFORM_IS(prod))
+            window.SetTitle(STR((window_name), " TPS:", (fps_counter.Tps()), " FPS:", (fps_counter.Fps()), " SOUNDS:", (audio.ActiveSources())));
     }
 
     void Tick() override

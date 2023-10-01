@@ -55,7 +55,7 @@ endif
 # The common PCH rules for all projects.
 override _pch_rules := src/game/*->src/game/master.hpp
 
-$(call Project,exe,imp-re)
+$(call Project,exe,micromachines)
 $(call ProjectSetting,source_dirs,src)
 $(call ProjectSetting,cxxflags,-DDOCTEST_CONFIG_DISABLE)
 $(call ProjectSetting,pch,$(_pch_rules))
