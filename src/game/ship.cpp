@@ -155,9 +155,9 @@ ShipPartPiston::ExtendRetractStatus ShipPartPiston::ExtendOrRetract(bool extend)
     dir_flip_flop = !dir_flip_flop;
 
     if (move_b)
-        MoveShipParts(push_program_b.at_least_one_pushed ? push_program_b.all_pushed_parts : parts_b, offset_b);
+        MoveShipParts(AddDraggedParts(push_program_b.at_least_one_pushed ? push_program_b.all_pushed_parts : parts_b, tree), offset_b);
     else
-        MoveShipParts(push_program_a.at_least_one_pushed ? push_program_a.all_pushed_parts : parts_a, offset_a);
+        MoveShipParts(AddDraggedParts(push_program_a.at_least_one_pushed ? push_program_a.all_pushed_parts : parts_a, tree), offset_a);
 
     // We exclude this piston from `parts_{a,b}`, so we need to manually update it.
     UpdateAabb();
@@ -457,7 +457,7 @@ bool CollideShipParts(
     const ConnectedShipParts &parts, ivec2 offset,
     const MapObject *map, const DynamicSolidTree *tree,
     DynamicSolidTree::EntityFilterFunc entity_filter,
-    const PushParams *push
+    std::variant<std::monostate, const PushParams *, DynamicSolidTree::EntityCallbackFunc> extra
 )
 {
     auto entity_filter_excluding_self = [next_filter = entity_filter, &parts](const Game::Entity &e)
@@ -466,11 +466,14 @@ bool CollideShipParts(
     };
 
     DynamicSolidTree::EntityCallbackFunc entity_callback;
-    if (push)
+    if (auto callback_opt = std::get_if<DynamicSolidTree::EntityCallbackFunc>(&extra))
     {
-        push->result->all_pushed_parts.blocks.insert(parts.blocks.begin(), parts.blocks.end());
-        push->result->all_pushed_parts.pistons.insert(parts.pistons.begin(), parts.pistons.end());
-        push->result->all_pushed_parts.entity_ids.insert(parts.entity_ids.begin(), parts.entity_ids.end());
+        entity_callback = std::move(*callback_opt);
+    }
+    else if (auto push_opt = std::get_if<const PushParams *>(&extra))
+    {
+        auto push = *push_opt;
+        push->result->all_pushed_parts.Append(parts);
 
         entity_callback = [&](Game::Entity &e, std::function<bool(ivec2 offset)> collide) -> bool
         {
@@ -525,6 +528,34 @@ bool CollideShipParts(
     }
 
     return false;
+}
+
+ConnectedShipParts AddDraggedParts(const ConnectedShipParts &parts, const DynamicSolidTree *tree)
+{
+    if (!tree)
+        return parts;
+
+    ivec2 gravity;
+    if (auto con = game.get<GravityController>().get_opt())
+        gravity = con->dir;
+    if (!gravity)
+        return parts;
+
+    ConnectedShipParts new_parts;
+    new_parts.Append(parts);
+
+    (void)CollideShipParts(parts, -gravity, nullptr, tree, nullptr, [&](Game::Entity &e, std::function<bool(ivec2 offset)> collide)
+    {
+        if (new_parts.entity_ids.contains(e.id()))
+            return false;
+
+        if (collide(ivec2{}))
+            new_parts.Append(FindConnectedShipParts(&e));
+
+        return false;
+    });
+
+    return new_parts;
 }
 
 void MoveShipParts(const ConnectedShipParts &parts, ivec2 offset)

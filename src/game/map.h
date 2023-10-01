@@ -17,7 +17,7 @@ namespace TileDrawMethods
     template <typename Data>
     struct DualGridPass
     {
-        typename Data::Tile tile{};
+        phmap::flat_hash_set<typename Data::Tile> tiles;
         ivec2 tex;
         float alpha = 1;
     };
@@ -93,6 +93,7 @@ struct ShipGridData
         block,
         piston_h, // Those are only used temporarily, until the ship is split into sections.
         piston_v, // Then pistons become entities.
+        goal,
         _count [[maybe_unused]]
     };
 
@@ -118,8 +119,13 @@ struct ShipGridData
     static const Graphics::Region &GetImage() {return "ship_tiles"_image;}
     static auto GetRawTileInfoArray() -> std::array<TileInfo, std::to_underlying(Tile::_count)>;
 
-    static constexpr TileDrawMethods::DualGridPass<ShipGridData> dual_grid_passes[] = {{.tile = Tile::block, .tex = ivec2(0,0), .alpha = 1}};
-    static constexpr TileDrawMethods::DualGridPass<ShipGridData> dual_grid_pre_passes[] = {{.tile = Tile::block, .tex = ivec2(0,1), .alpha = 1}};
+    inline static const TileDrawMethods::DualGridPass<ShipGridData> dual_grid_passes[] = {
+        {.tiles = {Tile::block}, .tex = ivec2(0,0), .alpha = 1},
+        {.tiles = {Tile::goal}, .tex = ivec2(0,4), .alpha = 1},
+    };
+    inline static const TileDrawMethods::DualGridPass<ShipGridData> dual_grid_pre_passes[] = {
+        {.tiles = {Tile::block, Tile::goal}, .tex = ivec2(0,1), .alpha = 1},
+    };
 };
 using ShipGrid = BasicGrid<ShipGridData>;
 
@@ -191,7 +197,7 @@ class Map
                     {
                         ivec2 point = tile_pos + offset;
                         if (cells.bounds().contains(point))
-                            return cells.safe_nonthrowing_at(point).tile == pass.tile;
+                            return pass.tiles.contains(cells.safe_nonthrowing_at(point).tile);
                         else
                             return false;
                     };

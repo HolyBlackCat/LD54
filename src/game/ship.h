@@ -241,6 +241,13 @@ struct ConnectedShipParts
     // Note that the user can desync those. This variable is only used by the lambda below.
     phmap::flat_hash_set<Game::Id> entity_ids;
 
+    void Append(const ConnectedShipParts &other)
+    {
+        blocks.insert(other.blocks.begin(), other.blocks.end());
+        pistons.insert(other.pistons.begin(), other.pistons.end());
+        entity_ids.insert(other.entity_ids.begin(), other.entity_ids.end());
+    }
+
     // Returns a predicate on `Game::Entity &` that tests that it's not in `entity_ids`.
     auto LambdaNoSuchEntityHere()
     {
@@ -277,14 +284,20 @@ struct PushParams
 // Checks collision for ship `parts` at `offset`, against `map` and/or `tree`.
 // Both maps and the tree is optional.
 // If `entity_filter` is specified and returns false, that entity is ignored.
-// If `push` is specified, will try to push entities along, and return false on success.
+// If `extra` is `PushParams`, will try to push entities along, and return false on success.
 //   Then, on success, it will be updated with a list of all things you need to push. Move them, instead of `parts`.
+// If `extra` is a callback, it will be used.
 [[nodiscard]] bool CollideShipParts(
     const ConnectedShipParts &parts, ivec2 offset,
     const MapObject *map, const DynamicSolidTree *tree,
     DynamicSolidTree::EntityFilterFunc entity_filter = nullptr,
-    const PushParams *push = nullptr
+    std::variant<std::monostate, const PushParams *, DynamicSolidTree::EntityCallbackFunc> extra = {}
 );
+
+// Adds parts that are dragged because they're sitting on the moving ones.
+// Has no effect without gravity.
+// Returns a superset of the passed `parts`.
+[[nodiscard]] ConnectedShipParts AddDraggedParts(const ConnectedShipParts &parts, const DynamicSolidTree *tree);
 
 // Moves the `parts` by the `offset`, and updates their AABB boxes.
 void MoveShipParts(const ConnectedShipParts &parts, ivec2 offset);
