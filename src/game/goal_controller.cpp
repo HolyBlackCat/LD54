@@ -74,7 +74,11 @@ void GoalController::Tick()
 
 void GoalController::GuiRender() const
 {
+    // Level name.
     r.itext(ivec2(0, -screen_size.y/2 + 15), Graphics::Text(Fonts::main, level_name)).color(fvec3(0.2f, 0.45f, 0.8f)).alpha(0.75f);
+
+    if (level_name.empty())
+        r.itext(ivec2(-screen_size.x/2+1, screen_size.y/2), Graphics::Text(Fonts::main, "by HolyBlackCat, for LD54 'limited space'")).color(fvec3(0.2f, 0.45f, 0.8f)).alpha(0.25f).align(ivec2(-1,1));
 }
 
 void GoalController::FadeRender() const
