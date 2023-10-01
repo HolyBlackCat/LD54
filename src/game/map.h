@@ -17,7 +17,7 @@ namespace TileDrawMethods
     template <typename Data>
     struct DualGridPass
     {
-        phmap::flat_hash_set<typename Data::Tile> tiles;
+        std::vector<typename Data::Tile> tiles;
         ivec2 tex;
         float alpha = 1;
     };
@@ -61,11 +61,13 @@ class BasicGrid : public Data
 struct WorldGridData
 {
     static constexpr int tile_size = 12;
+    static constexpr bool have_normal_visible_tiles = false;
 
     enum class Tile
     {
         air,
         wall,
+        bg,
         _count [[maybe_unused]]
     };
 
@@ -82,6 +84,7 @@ struct WorldGridData
     static auto GetRawTileInfoArray() -> std::array<TileInfo, std::to_underlying(Tile::_count)>;
 
     inline static const TileDrawMethods::DualGridPass<WorldGridData> dual_grid_passes[] = {
+        {.tiles = {Tile::bg  }, .tex = ivec2(0,1), .alpha = 1},
         {.tiles = {Tile::wall}, .tex = ivec2(0,0), .alpha = 1},
     };
 };
@@ -90,6 +93,7 @@ using WorldGrid = BasicGrid<WorldGridData>;
 struct ShipGridData
 {
     static constexpr int tile_size = 4;
+    static constexpr bool have_normal_visible_tiles = false;
 
     enum class Tile
     {
@@ -155,12 +159,34 @@ class Map
 
     Map() {}
 
-    Map(Stream::Input source)
+    Map(Json::View layer_json, std::string exception_prefix)
+    {
+        auto layer = Tiled::LoadTileLayer(layer_json);
+
+        cells.resize(ivec2(layer.size()));
+
+        for (ivec2 pos : vector_range(cells.size()))
+        {
+            int tile_index = layer.safe_nonthrowing_at(pos);
+            if (tile_index < 0 || tile_index >= std::to_underlying(Grid::Tile::_count))
+                throw std::runtime_error(FMT("{}Bad tile {} at {}.", exception_prefix, tile_index, pos));
+
+            Cell &cell = cells.safe_nonthrowing_at(pos);
+
+            cell.tile = typename Grid::Tile(tile_index);
+            cell.RegenerateNoise();
+        }
+    }
+
+    Map(Stream::Input source, Map *bg_map = nullptr)
     {
         Json json(source.ReadToMemory().string(), 32);
 
         if (auto la = Tiled::FindLayerOpt(json.GetView(), "objects"))
             points = Tiled::LoadPointLayer(la);
+
+        if (bg_map)
+            *bg_map = Map(Tiled::FindLayer(json.GetView(), "bg"), source.GetExceptionPrefix());
 
         auto layer_mid = Tiled::LoadTileLayer(Tiled::FindLayer(json.GetView(), "mid"));
 
@@ -211,7 +237,7 @@ class Map
                     {
                         ivec2 point = tile_pos + offset;
                         if (cells.bounds().contains(point))
-                            return pass.tiles.contains(cells.safe_nonthrowing_at(point).tile);
+                            return std::find(pass.tiles.begin(), pass.tiles.end(), cells.safe_nonthrowing_at(point).tile) != pass.tiles.end();
                         else
                             return false;
                     };
@@ -225,7 +251,7 @@ class Map
             }
         }
 
-        if constexpr (Mode == TileDrawMethods::RenderMode::normal)
+        if constexpr (Grid::have_normal_visible_tiles && Mode == TileDrawMethods::RenderMode::normal)
         {
             ivec2 a = div_ex(camera_pos - screen_size / 2, Grid::tile_size);
             ivec2 b = div_ex(camera_pos + screen_size / 2, Grid::tile_size);
@@ -307,6 +333,9 @@ struct MapObject
     IMP_STANDALONE_COMPONENT(Game)
 
     ivec2 pos;
+
+    // Order matters, due to how we construct those.
+    Map<WorldGrid> bg_map;
     Map<WorldGrid> map;
 
     MapObject() {}
@@ -314,6 +343,7 @@ struct MapObject
 
     void RenderMap() const
     {
+        bg_map.Render<TileDrawMethods::RenderMode::normal>(game.get<Camera>()->pos - pos);
         map.Render<TileDrawMethods::RenderMode::normal>(game.get<Camera>()->pos - pos);
     }
 };

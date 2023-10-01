@@ -18,6 +18,12 @@ $(Mode)PROJ_COMMON_FLAGS := -flto
 $(Mode)PROJ_CXXFLAGS := -DIMP_PLATFORM_FLAG_prod=1
 $(Mode)_win_subsystem := -mwindows
 
+$(call NewMode,release_with_symbols)
+$(Mode)GLOBAL_COMMON_FLAGS := -O3 -g
+# $(Mode)GLOBAL_CXXFLAGS := -DNDEBUG
+$(Mode)PROJ_CXXFLAGS := -DIMP_PLATFORM_FLAG_prod=1
+$(Mode)_win_subsystem := -mwindows
+
 $(call NewMode,profile)
 $(Mode)GLOBAL_COMMON_FLAGS := -O3 -pg
 $(Mode)GLOBAL_CXXFLAGS := -DNDEBUG
@@ -133,14 +139,6 @@ ifeq ($(TARGET_OS),windows)
 _zlib_env_vars += uname=linux
 endif
 
-$(call Library,box2d,box2d-2.4.1.tar.gz)
-  $(call LibrarySetting,cmake_flags,-DBOX2D_BUILD_UNIT_TESTS:BOOL=OFF -DBOX2D_BUILD_TESTBED:BOOL=OFF)
-
-$(call Library,bullet,bullet3-3.25_no-examples.tar.gz)
-  # The `_no-examples` suffix on the archive indicates that following directories were removed from it: `./data`, and everything in `./examples` except `CommonInterfaces`.
-  # This decreases the archive size from 170+ mb to 10+ mb.
-  $(call LibrarySetting,cmake_flags,$(_bullet_flags))
-
 $(call Library,doctest,doctest-2.4.11.tar.gz)
   $(call LibrarySetting,cmake_flags,-DDOCTEST_WITH_TESTS:BOOL=OFF)# Tests don't compile because of their `-Werror`. Last tested on doctest-2.4.11, Clang 16.0.1.
 
@@ -249,17 +247,11 @@ ifeq ($(TARGET_OS),windows)
 $(call Library,sdl2,SDL2-devel-2.26.4-mingw.tar.gz)
   $(call LibrarySetting,build_system,copy_files)
   $(call LibrarySetting,copy_files,$(_win_sdl2_arch)/*->.)
-$(call Library,sdl2_net,SDL2_net-devel-2.2.0-mingw.tar.gz)
-  $(call LibrarySetting,build_system,copy_files)
-  $(call LibrarySetting,copy_files,$(_win_sdl2_arch)/*->.)
 else
 $(call Library,sdl2,SDL2-2.26.4.tar.gz)
   # Allow SDL to see system packages. If we were using `configure+make`, we'd need `configure_vars = env -uPKG_CONFIG_PATH -uPKG_CONFIG_LIBDIR` instead.
   $(call LibrarySetting,cmake_flags,-DCMAKE_FIND_USE_CMAKE_SYSTEM_PATH=ON)
   $(call LibrarySetting,common_flags,-fno-sanitize=address -fno-sanitize=undefined)# ASAN/UBSAN cause linker errors in Linux, when making `libSDL2.so`. `-DSDL_ASAN=ON` doesn't help.
-$(call Library,sdl2_net,SDL2_net-2.2.0.tar.gz)
-  $(call LibrarySetting,deps,sdl2)
-  $(call LibrarySetting,common_flags,-fno-sanitize=address -fno-sanitize=undefined)# See above.
 endif
 
 $(call Library,stb,stb-5736b15.zip)

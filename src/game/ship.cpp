@@ -484,7 +484,7 @@ bool CollideShipParts(
         auto push = *push_opt;
         push->result->all_pushed_parts.Append(parts);
 
-        entity_callback = [&](Game::Entity &e, std::function<bool(ivec2 offset)> collide) -> bool
+        entity_callback = [push, offset, map, tree, entity_filter](Game::Entity &e, std::function<bool(ivec2 offset)> collide) -> bool
         {
             if (push->result->all_pushed_parts.entity_ids.contains(e.id()))
             {

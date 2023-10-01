@@ -11,6 +11,7 @@ auto WorldGridData::GetRawTileInfoArray() -> std::array<TileInfo, std::to_underl
     std::array<TileInfo, std::to_underlying(Tile::_count)> ret = {{
         { .tile = Tile::air,  .solid = false, .draw = Invis{}, },
         { .tile = Tile::wall, .solid = true,  .draw = Invis{}/*dual grid*/, },
+        { .tile = Tile::bg,   .solid = false,  .draw = Invis{}/*dual grid*/, },
     }};
 
     return ret;
@@ -32,8 +33,9 @@ auto ShipGridData::GetRawTileInfoArray() -> std::array<TileInfo, std::to_underly
 }
 
 MapObject::MapObject(Stream::Input input)
-    : map(std::move(input))
+    : map(std::move(input), &bg_map)
 {
+    // Ship blocks.
     map.points.ForEachPointWithNamePrefix("=", [](std::string_view suffix, fvec2 pos)
     {
         bool nograv = false;
@@ -74,8 +76,20 @@ MapObject::MapObject(Stream::Input input)
         });
     });
 
+    // Tooltips.
+    map.points.ForEachPointWithNamePrefix("?", [](std::string_view suffix, fvec2 pos)
+    {
+        auto &tooltip = game.create<Tooltip>();
+        tooltip.pos = iround(pos);
+        tooltip.kind = Refl::FromString<Tooltip::Kind>(suffix);
+    });
+
+    // Editor.
     map.points.ForEachPointWithNamePrefix("editor", [](std::string_view suffix, fvec2 pos)
     {
+        if (game.get<ShipEditorController>())
+            throw std::runtime_error("More than one editor entity.");
+
         Stream::Input input = Stream::ReadOnlyData::mem_reference(suffix);
         ivec2 box_size;
         input.Discard(':');

@@ -70,3 +70,28 @@ struct ShipEditorController :
     void PreRender() const override;
     void GuiRender() const override;
 };
+
+struct Tooltip :
+    Tickable,
+    GuiRenderable
+{
+    IMP_STANDALONE_COMPONENT(Game)
+
+    ENUM( Kind ENUM_CLASS AT_CLASS_SCOPE,
+        (left_click)
+        (right_click)
+    )
+
+    ivec2 pos;
+
+    int timer = 0;
+    int timer2 = 0;
+
+    bool extended_once = false;
+    bool contracted_once = false;
+
+    Kind kind = Kind::left_click;
+
+    void Tick() override;
+    void GuiRender() const override;
+};

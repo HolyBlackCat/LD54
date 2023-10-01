@@ -48,7 +48,17 @@ bool PistonMouseController::MouseFocusTick()
         auto &active_piston = active_piston_entity->get<ShipPartPiston>();
 
         if (control)
+        {
             active_piston.ExtendOrRetract(control > 0);
+
+            for (auto &tooltip : game.get<Game::Category<Ent::UnorderedList, Tooltip>>())
+            {
+                if (control > 0)
+                    tooltip.get<Tooltip>().extended_once = true;
+                else
+                    tooltip.get<Tooltip>().contracted_once = true;
+            }
+        }
 
         last_piston_rect = active_piston.last_rect;
         last_piston_is_vertical = active_piston.is_vertical;
@@ -351,4 +361,48 @@ void ShipEditorController::GuiRender() const
         if (play_pause_hovered && !mouse.left.down())
             quad.color(Draw::ColorFromEnum(Draw::Color::selection)).mix(0.77f);
     }
+}
+
+void Tooltip::Tick()
+{
+    switch (kind)
+    {
+      case Kind::left_click:
+        if (!extended_once)
+            timer++;
+        else
+            timer2++;
+        break;
+      case Kind::right_click:
+        if (contracted_once)
+            timer2++;
+        else if (extended_once)
+            timer++;
+        break;
+    }
+}
+
+void Tooltip::GuiRender() const
+{
+    std::string text;
+    ivec2 align;
+    switch (kind)
+    {
+      case Kind::left_click:
+        text = "Click to expand";
+        align = ivec2(0, 0);
+        break;
+      case Kind::right_click:
+        text = "Click right mouse button to contract";
+        align = ivec2(1, 0);
+        break;
+    }
+
+    ivec2 text_pos = pos - game.get<Camera>()->pos;
+
+    float alpha = min(clamp((timer - 120) / 90.f), 1 - clamp((timer2 - 60) / 90.f));
+
+    for (int i = 0; i < 8; i++)
+        r.itext(text_pos + ivec2::dir8(i), Graphics::Text(Fonts::main, text)).align(align).color(fvec3(0)).alpha(smoothstep(clamp(alpha * 2 - 1)) * (i % 2 ? 0.5f : 1.f));
+    r.itext(text_pos, Graphics::Text(Fonts::main, text)).align(align).color(fvec3(1)).alpha(smoothstep(clamp(alpha * 2)));
 }

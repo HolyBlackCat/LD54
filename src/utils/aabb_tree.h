@@ -108,7 +108,8 @@ class AabbTree
         }
         else
         {
-            ASSERT(node_set.Insert(new_index));
+            [[maybe_unused]] bool ok = node_set.Insert(new_index);
+            ASSERT(ok);
         }
 
         // Don't want to create a reference to `nodes[new_index]` yet, since it can become dangling later.
@@ -618,31 +619,31 @@ class AabbTree
     // Don't call direclty, use the `Validate()` function.
     void ValidateNode(NodeIndex index) const
     {
-        ASSERT_ALWAYS(index != null_index);
+        ASSERT(index != null_index);
 
         const Node &node = nodes[index];
 
-        ASSERT_ALWAYS((index == root_index) == (node.parent == null_index));
+        ASSERT((index == root_index) == (node.parent == null_index));
 
         if (node.IsLeaf())
         {
-            ASSERT_ALWAYS(node.children[0] == null_index);
-            ASSERT_ALWAYS(node.children[1] == null_index);
-            ASSERT_ALWAYS(node.height == 0);
+            ASSERT(node.children[0] == null_index);
+            ASSERT(node.children[1] == null_index);
+            ASSERT(node.height == 0);
         }
         else
         {
-            ASSERT_ALWAYS(node_set.Contains(node.children[0]));
-            ASSERT_ALWAYS(node_set.Contains(node.children[1]));
+            ASSERT(node_set.Contains(node.children[0]));
+            ASSERT(node_set.Contains(node.children[1]));
 
             const Node &child0 = nodes[node.children[0]];
             const Node &child1 = nodes[node.children[1]];
 
-            ASSERT_ALWAYS(child0.parent == index);
-            ASSERT_ALWAYS(child1.parent == index);
+            ASSERT(child0.parent == index);
+            ASSERT(child1.parent == index);
 
-            ASSERT_ALWAYS(node.height == 1 + max(child0.height, child1.height));
-            ASSERT_ALWAYS(node.aabb == child0.aabb.combine(child1.aabb));
+            ASSERT(node.height == 1 + max(child0.height, child1.height));
+            ASSERT(node.aabb == child0.aabb.combine(child1.aabb));
 
             ValidateNode(node.children[0]);
             ValidateNode(node.children[1]);
