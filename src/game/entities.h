@@ -24,6 +24,15 @@ struct Tickable
 };
 using AllTickable = Game::Category<Ent::OrderedList, Tickable>;
 
+struct MouseFocusTickable
+{
+    IMP_COMPONENT(Game)
+
+    // If this returns true, other entities don't get this event.
+    virtual bool MouseFocusTick() = 0;
+};
+using AllMouseFocusTickable = Game::Category<Ent::OrderedList, MouseFocusTickable>;
+
 struct PreRenderable
 {
     IMP_COMPONENT(Game)

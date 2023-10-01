@@ -51,6 +51,18 @@ namespace States
             for (auto &e : game.get<AllTickable>())
                 e.get<Tickable>().Tick();
 
+            { // Mouse focus callbacks.
+                auto &mouse_focus_tickable = game.get<AllMouseFocusTickable>();
+                auto it = mouse_focus_tickable.end();
+                while (it != mouse_focus_tickable.begin())
+                {
+                    --it;
+
+                    if (it->get<MouseFocusTickable>().MouseFocusTick())
+                        break;
+                }
+            }
+
             // auto &ships = game.get<Game::Category<Ent::OrderedList, ShipPartBlocks>>();
             // if (ships.has_elems())
             // {

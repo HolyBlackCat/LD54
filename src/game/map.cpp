@@ -2,6 +2,7 @@
 
 #include "game/goal_controller.h"
 #include "game/ship.h"
+#include "game/ui.h"
 
 auto WorldGridData::GetRawTileInfoArray() -> std::array<TileInfo, std::to_underlying(Tile::_count)>
 {
@@ -71,5 +72,20 @@ MapObject::MapObject(Stream::Input input)
             if (goal)
                 game.get<GoalController>()->goal_blocks.insert(dynamic_cast<Game::Entity &>(blocks).id());
         });
+    });
+
+    map.points.ForEachPointWithNamePrefix("editor", [](std::string_view suffix, fvec2 pos)
+    {
+        Stream::Input input = Stream::ReadOnlyData::mem_reference(suffix);
+        ivec2 box_size;
+        input.Discard(':');
+        Refl::InterfaceFor(box_size.x).FromString(box_size.x, input, {}, Refl::initial_state);
+        input.Discard(':');
+        Refl::InterfaceFor(box_size.y).FromString(box_size.y, input, {}, Refl::initial_state);
+        input.ExpectEnd();
+
+        auto &con = game.create<ShipEditController>();
+        con.world_pos = iround(pos);
+        con.cells.resize(box_size);
     });
 }
