@@ -59,6 +59,7 @@ namespace States
             Audio::ListenerPosition(fvec3(0, 0, -audio_distance));
             Audio::ListenerOrientation(fvec3(0,0,1), fvec3(0,-1,0));
             Audio::Source::DefaultRefDistance(audio_distance);
+            Audio::Volume(2.5f);
 
             // Count the levels.
             while (true)
