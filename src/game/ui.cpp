@@ -73,7 +73,7 @@ void PistonMouseController::GuiRender() const
 }
 
 
-std::vector<ShipGrid::Tile> ShipEditController::GetAvailableTileTypes() const
+std::vector<ShipGrid::Tile> ShipEditorController::GetAvailableTileTypes() const
 {
     std::vector<ShipGrid::Tile> ret = {ShipGrid::Tile::block};
 
@@ -85,11 +85,13 @@ std::vector<ShipGrid::Tile> ShipEditController::GetAvailableTileTypes() const
     return ret;
 }
 
-void ShipEditController::Tick()
+void ShipEditorController::Tick()
 {
     clamp_var(shown_anim_timer += (shown ? 1 : -1) * 0.05f);
 
     has_mouse_focus = shown;
+
+    play_pause_hovered = false;
 
     if (shown)
     {
@@ -99,23 +101,28 @@ void ShipEditController::Tick()
         editor_tiles_screen_pos = -cells.size() * editor_tile_size / 2;
         tile_selector_screen_pos = editor_tiles_screen_pos + ivec2(cells.size().x * editor_tile_size + 16, -5);
     }
+
+    play_pause_button_pos = screen_size/2 - ivec2("play_pause"_image.size().y);
 }
 
-bool ShipEditController::MouseFocusTick()
+bool ShipEditorController::MouseFocusTick()
 {
     if (shown)
     {
         has_mouse_focus = true;
 
+        if (mouse.left.up())
+            editing_initial_enabled = true;
+
         hovered_tile = div_ex(mouse.pos() - editor_tiles_screen_pos, editor_tile_size);
-        any_tile_hovered = cells.bounds().contains(hovered_tile);
+        any_tile_hovered = editing_initial_enabled && cells.bounds().contains(hovered_tile);
 
         // Hover tile selector.
         ivec2 cur = tile_selector_screen_pos;
         auto avail_tiles = GetAvailableTileTypes();
         for (int i = 0; i < (int)std::size(avail_tiles); i++)
         {
-            if (cur.rect_size(editor_tile_size).contains(mouse.pos()))
+            if (editing_initial_enabled && cur.rect_size(editor_tile_size).contains(mouse.pos()))
             {
                 hovered_tile_selector = i;
 
@@ -154,10 +161,52 @@ bool ShipEditController::MouseFocusTick()
         }
     }
 
-    return shown;
+    // Space closes the editor. R opens the editor.
+    // Both terminate the initial preview, as well as clicking anywhere.
+    bool space_pressed = Input::Button(Input::space).pressed();
+    bool reload_pressed = Input::Button(Input::r).pressed();
+
+    { // The play/pause button.
+        bool hotkey_pressed = initial_preview ? space_pressed || reload_pressed : shown ? space_pressed : reload_pressed;
+
+        play_pause_hovered = initial_preview || play_pause_button_pos.rect_size("play_pause"_image.size().y).contains(mouse.pos());
+
+        if ((play_pause_hovered && mouse.left.pressed()) || hotkey_pressed)
+        {
+            if (shown)
+            {
+                // Start level.
+                auto &new_blocks = game.create<ShipPartBlocks>();
+                new_blocks.pos = world_pos;
+                new_blocks.map.cells.resize(cells.size());
+                for (ivec2 pos : vector_range(cells.size()))
+                {
+                    auto &target_cell = new_blocks.map.cells.safe_nonthrowing_at(pos);
+                    target_cell.tile = cells.safe_nonthrowing_at(pos);
+                    target_cell.RegenerateNoise();
+                }
+                DecomposeToComponentsAndDelete(new_blocks);
+
+                shown = false;
+                game.get<GravityController>()->enabled = true;
+            }
+            else
+            {
+                // Reload the level.
+                want_level_reload = true;
+            }
+        }
+    }
+
+    return shown || play_pause_hovered;
 }
 
-void ShipEditController::GuiRender() const
+void ShipEditorController::PreRender() const
+{
+    r.iquad(world_pos - game.get<Camera>()->pos, cells.size() * ShipGrid::tile_size).color(fvec3(1)).alpha(0.2f);
+}
+
+void ShipEditorController::GuiRender() const
 {
     if (shown_anim_timer > 0.001f)
     {
@@ -292,5 +341,14 @@ void ShipEditController::GuiRender() const
 
             cur.y += tile_selector_step;
         }
+    }
+
+    // Play/pause button.
+    if (!initial_preview)
+    {
+        int button_size = "play_pause"_image.size().y;
+        auto quad = r.iquad(play_pause_button_pos, "play_pause"_image with(= _.a + ivec2(button_size * !shown, 0).rect_size(button_size)));
+        if (play_pause_hovered && !mouse.left.down())
+            quad.color(Draw::ColorFromEnum(Draw::Color::selection)).mix(0.77f);
     }
 }

@@ -84,8 +84,8 @@ MapObject::MapObject(Stream::Input input)
         Refl::InterfaceFor(box_size.y).FromString(box_size.y, input, {}, Refl::initial_state);
         input.ExpectEnd();
 
-        auto &con = game.create<ShipEditController>();
-        con.world_pos = iround(pos);
+        auto &con = game.create<ShipEditorController>();
+        con.world_pos = iround(pos) with(.x -= box_size.x * ShipGrid::tile_size / 2, .y -= box_size.y * ShipGrid::tile_size);
         con.cells.resize(box_size);
     });
 }

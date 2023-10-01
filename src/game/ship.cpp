@@ -211,7 +211,8 @@ void ShipPartPiston::Render() const
 
 void GravityController::Tick()
 {
-    MoveShipsByGravity(dir, acc, max_speed);
+    if (enabled)
+        MoveShipsByGravity(dir, acc, max_speed);
 }
 
 void DecomposeToComponentsAndDelete(ShipPartBlocks &self, std::function<void(ShipPartBlocks &blocks)> finalize_blocks)

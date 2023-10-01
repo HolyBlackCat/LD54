@@ -222,6 +222,10 @@ struct GravityController :
 {
     IMP_STANDALONE_COMPONENT(Game)
 
+    // Reloading the level disables this.
+    // The editor enables it when done editing.
+    bool enabled = true;
+
     ivec2 dir = ivec2(0,1);
     float acc = 0.1f;
     float max_speed = 2;

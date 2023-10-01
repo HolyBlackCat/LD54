@@ -139,6 +139,11 @@ class Map
         typename Grid::Tile tile{};
 
         unsigned char noise = 0;
+
+        void RegenerateNoise()
+        {
+            noise = ra.i <= 255;
+        }
     };
 
     Array2D<Cell, int> cells;
@@ -166,7 +171,7 @@ class Map
             Cell &cell = cells.safe_nonthrowing_at(pos);
 
             cell.tile = typename Grid::Tile(tile_index);
-            cell.noise = ra.i <= 255;
+            cell.RegenerateNoise();
         }
     }
 

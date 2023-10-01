@@ -45,9 +45,26 @@ namespace States
         {
             (void)next_state;
 
+            // Reload the level if needed (this should be first).
+            if (auto editor = game.get<ShipEditorController>().get_opt(); editor && editor->want_level_reload)
+            {
+                auto editor_cells = std::move(game.get<ShipEditorController>()->cells);
+                auto editor_selected_tile = game.get<ShipEditorController>()->selected_tile;
+                LoadLevel(cur_level_index);
+                game.get<ShipEditorController>()->initial_preview = false;
+                game.get<ShipEditorController>()->shown = true;
+                game.get<ShipEditorController>()->selected_tile = editor_selected_tile;
+                game.get<ShipEditorController>()->selected_tile = editor_selected_tile;
+                game.get<GoalController>()->initial_delay = 0;
+                game.get<GoalController>()->fade_timer = 0;
+                game.get<GravityController>()->enabled = false; // The editor will reenable this.
+            }
+
+            // Load the next level if we're finished.
             if (auto goal = game.get<GoalController>().get_opt(); goal && goal->ShouldSwitchToNextLevel())
                 LoadLevel(cur_level_index + 1);
 
+            // Tick.
             for (auto &e : game.get<AllTickable>())
                 e.get<Tickable>().Tick();
 
@@ -62,18 +79,6 @@ namespace States
                         break;
                 }
             }
-
-            // auto &ships = game.get<Game::Category<Ent::OrderedList, ShipPartBlocks>>();
-            // if (ships.has_elems())
-            // {
-            //     auto parts = FindConnectedShipParts(&ships.begin()->get<ShipPartBlocks>());
-
-            //     std::cout << CollideShipParts(parts, ivec2(0,0), game.get<MapObject>().get_opt(), game.get<DynamicSolidTree>().get_opt(), parts.LambdaNoSuchEntityHere());
-            //     std::cout << CollideShipParts(parts, ivec2(0,1), game.get<MapObject>().get_opt(), game.get<DynamicSolidTree>().get_opt(), parts.LambdaNoSuchEntityHere());
-            //     std::cout << '\n';
-
-            //     MoveShipParts(parts, mouse.pos_delta());
-            // }
         }
 
         void Render() const override

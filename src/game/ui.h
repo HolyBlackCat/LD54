@@ -21,7 +21,9 @@ struct PistonMouseController : MouseFocusTickable, GuiRenderable
     void GuiRender() const override;
 };
 
-struct ShipEditController : Tickable, MouseFocusTickable, GuiRenderable
+struct ShipEditorController :
+    Tickable, MouseFocusTickable,
+    PreRenderable, GuiRenderable
 {
     IMP_STANDALONE_COMPONENT(Game)
 
@@ -29,14 +31,18 @@ struct ShipEditController : Tickable, MouseFocusTickable, GuiRenderable
         editor_tile_size = 16,
         tile_selector_step = 26;
 
-
-    bool shown = true;
+    bool shown = false;
     float shown_anim_timer = 0;
+
+    // This becomes true when the mouse is first released.
+    // Otherwise clicking to stop the starting preview places a block immediately.
+    bool editing_initial_enabled = false;
 
     ivec2 world_pos;
 
     ivec2 editor_tiles_screen_pos;
     ivec2 tile_selector_screen_pos;
+    ivec2 play_pause_button_pos;
 
     bool any_tile_hovered = false;
     ivec2 hovered_tile;
@@ -47,11 +53,20 @@ struct ShipEditController : Tickable, MouseFocusTickable, GuiRenderable
     bool has_mouse_focus = false;
     Draw::Color rect_style = Draw::Color::selection;
 
+    bool play_pause_hovered = false;
+
+    // If true, we're doing the initial preview.
+    bool initial_preview = true;
+
+    // The game state watches this, and reloads the level when this becomes true.
+    bool want_level_reload = false;
+
     Array2D<ShipGrid::Tile, int> cells;
 
     std::vector<ShipGrid::Tile> GetAvailableTileTypes() const;
 
     void Tick() override;
     bool MouseFocusTick() override;
+    void PreRender() const override;
     void GuiRender() const override;
 };
