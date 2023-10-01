@@ -1,5 +1,6 @@
 #include "game/draw.h"
 #include "game/entities.h"
+#include "game/goal_controller.h"
 #include "game/main.h"
 #include "game/map.h"
 #include "game/ship.h"
@@ -12,6 +13,23 @@ namespace States
     {
         MEMBERS()
 
+        int cur_level_index = 0;
+
+        void LoadLevel(int index)
+        {
+            cur_level_index = index;
+
+            game = nullptr;
+
+            game.create<DynamicSolidTree>();
+            game.create<PistonMouseController>();
+            game.create<GravityController>();
+            game.create<GoalController>();
+
+            game.create<MapObject>(FMT("{}assets/maps/{}.json", Program::ExeDir(), index));
+            game.create<Camera>().pos = game.get<MapObject>()->map.cells.size() * WorldGrid::tile_size / 2;
+        }
+
         void Init() override
         {
             // Configure the audio.
@@ -20,25 +38,15 @@ namespace States
             Audio::ListenerOrientation(fvec3(0,0,1), fvec3(0,-1,0));
             Audio::Source::DefaultRefDistance(audio_distance);
 
-            // Entities.
-            game = nullptr;
-
-            game.create<DynamicSolidTree>();
-            game.create<PistonMouseController>();
-            game.create<GravityController>();
-
-            game.create<MapObject>(Program::ExeDir() + "assets/maps/1.json");
-            game.create<Camera>().pos = game.get<MapObject>()->map.cells.size() * WorldGrid::tile_size / 2;
-
-            auto &ship = game.create<ShipPartBlocks>();
-            ship.map = Map<ShipGrid>(Program::ExeDir() + "assets/maps/test_ship.json");
-            ship.pos = ivec2(64, 92);
-            DecomposeToComponentsAndDelete(ship);
+            LoadLevel(1);
         }
 
         void Tick(std::string &next_state) override
         {
             (void)next_state;
+
+            if (auto goal = game.get<GoalController>().get_opt(); goal && goal->ShouldSwitchToNextLevel())
+                LoadLevel(cur_level_index + 1);
 
             for (auto &e : game.get<AllTickable>())
                 e.get<Tickable>().Tick();
@@ -65,12 +73,16 @@ namespace States
 
             r.iquad(ivec2(), screen_size).center().color(fvec3(0.6f));
 
+            for (auto &e : game.get<Game::Category<Ent::OrderedList, MapObject>>())
+                e.get<MapObject>().RenderMap();
             for (auto &e : game.get<AllPreRenderable>())
                 e.get<PreRenderable>().PreRender();
             for (auto &e : game.get<AllRenderable>())
                 e.get<Renderable>().Render();
             for (auto &e : game.get<AllGuiRenderable>())
                 e.get<GuiRenderable>().GuiRender();
+            for (auto &e : game.get<AllFadeRenderable>())
+                e.get<FadeRenderable>().FadeRender();
 
             r.Finish();
         }

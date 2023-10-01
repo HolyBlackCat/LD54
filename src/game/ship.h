@@ -112,8 +112,12 @@ struct ShipPartBlocks :
         float speed_comp = 0;
         // Which direction the gravity was applied last. When it changes, we reset the velocity.
         ivec2 last_dir;
+
+        bool enabled = true;
     };
     Gravity gravity;
+
+    bool can_move = true;
 
 
     irect2 CalculateRect() const
@@ -137,6 +141,8 @@ struct ShipPartBlocks :
     }
 
     void Tick() override;
+
+    [[nodiscard]] ivec2 RenderOffset() const;
     void PreRender() const override;
     void Render() const override;
 };
@@ -226,7 +232,8 @@ struct GravityController :
 
 // Split this ship into multiple entities, by continuous map regions.
 // This entity itself is then destroyed.
-void DecomposeToComponentsAndDelete(ShipPartBlocks &self);
+// `finalize_blocks` is called on every new blocks entity.
+void DecomposeToComponentsAndDelete(ShipPartBlocks &self, std::function<void(ShipPartBlocks &blocks)> finalize_blocks = nullptr);
 
 struct ConnectedShipParts
 {
@@ -240,6 +247,12 @@ struct ConnectedShipParts
     // The ids of all entities from `blocks` and `pistons`.
     // Note that the user can desync those. This variable is only used by the lambda below.
     phmap::flat_hash_set<Game::Id> entity_ids;
+
+    void AddSingleBlocksObject(Game::Id id)
+    {
+        blocks.insert(&game.get(id).get<ShipPartBlocks>());
+        entity_ids.insert(id);
+    }
 
     void Append(const ConnectedShipParts &other)
     {
@@ -297,7 +310,7 @@ struct PushParams
 // Adds parts that are dragged because they're sitting on the moving ones.
 // Has no effect without gravity.
 // Returns a superset of the passed `parts`.
-[[nodiscard]] ConnectedShipParts AddDraggedParts(const ConnectedShipParts &parts, const DynamicSolidTree *tree);
+[[nodiscard]] ConnectedShipParts AddDraggedParts(const ConnectedShipParts &parts, ivec2 offset, const MapObject *map, const DynamicSolidTree *tree);
 
 // Moves the `parts` by the `offset`, and updates their AABB boxes.
 void MoveShipParts(const ConnectedShipParts &parts, ivec2 offset);

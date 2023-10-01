@@ -1,5 +1,8 @@
 #include "map.h"
 
+#include "game/goal_controller.h"
+#include "game/ship.h"
+
 auto WorldGridData::GetRawTileInfoArray() -> std::array<TileInfo, std::to_underlying(Tile::_count)>
 {
     using namespace TileDrawMethods;
@@ -25,4 +28,48 @@ auto ShipGridData::GetRawTileInfoArray() -> std::array<TileInfo, std::to_underly
     }};
 
     return ret;
+}
+
+MapObject::MapObject(Stream::Input input)
+    : map(std::move(input))
+{
+    map.points.ForEachPointWithNamePrefix("=", [](std::string_view suffix, fvec2 pos)
+    {
+        bool nograv = false;
+        bool fixed = false;
+        bool goal = false;
+        phmap::flat_hash_map<std::string, std::function<void()>> funcs = {
+            {"nograv", [&]{nograv = true;}},
+            {"fixed", [&]{fixed = true;}},
+            {"goal", [&]{goal = true;}},
+        };
+
+        auto sep = suffix.find_first_of(',');
+        std::string_view name = suffix.substr(0, sep);
+
+        while (sep != std::string_view::npos)
+        {
+            suffix = suffix.substr(sep + 1);
+            sep = suffix.find_first_of(',');
+
+            std::string_view part = suffix.substr(0, sep);
+            auto it = funcs.find(part);
+            if (it == funcs.end())
+                throw std::runtime_error(FMT("Unknown object modifier: `{}`.", part));
+            it->second();
+        }
+
+        auto &new_blocks = game.create<ShipPartBlocks>();
+        new_blocks.map = Map<ShipGrid>(FMT("{}assets/objects/{}.json", Program::ExeDir(), name));
+        new_blocks.pos = iround(pos);
+
+        DecomposeToComponentsAndDelete(new_blocks, [&](ShipPartBlocks &blocks)
+        {
+            blocks.gravity.enabled = !nograv && !fixed;
+            blocks.can_move = !fixed;
+
+            if (goal)
+                game.get<GoalController>()->goal_blocks.insert(dynamic_cast<Game::Entity &>(blocks).id());
+        });
+    });
 }

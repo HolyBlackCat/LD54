@@ -142,12 +142,17 @@ class Map
     };
 
     Array2D<Cell, int> cells;
+    Tiled::PointLayer points;
 
     Map() {}
 
     Map(Stream::Input source)
     {
         Json json(source.ReadToMemory().string(), 32);
+
+        if (auto la = Tiled::FindLayerOpt(json.GetView(), "objects"))
+            points = Tiled::LoadPointLayer(la);
+
         auto layer_mid = Tiled::LoadTileLayer(Tiled::FindLayer(json.GetView(), "mid"));
 
         cells.resize(ivec2(layer_mid.size()));
@@ -288,7 +293,7 @@ class Map
     }
 };
 
-struct MapObject : PreRenderable
+struct MapObject
 {
     IMP_STANDALONE_COMPONENT(Game)
 
@@ -296,9 +301,9 @@ struct MapObject : PreRenderable
     Map<WorldGrid> map;
 
     MapObject() {}
-    MapObject(Stream::Input input) : map(std::move(input)) {}
+    MapObject(Stream::Input input);
 
-    void PreRender() const override
+    void RenderMap() const
     {
         map.Render<TileDrawMethods::RenderMode::normal>(game.get<Camera>()->pos - pos);
     }

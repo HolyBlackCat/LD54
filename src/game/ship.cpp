@@ -52,15 +52,20 @@ void ShipPartBlocks::Tick()
     // std::cout << (map.CollidesWithMap(game.get<MapObject>()->map, pos - game.get<MapObject>()->pos)) << '\n';
 }
 
+ivec2 ShipPartBlocks::RenderOffset() const
+{
+    if (can_move && !gravity.enabled)
+    {
+        int offsets[] = {-1,-1,-1,0,0,1,1,1,0,0};
+        return ivec2(0, offsets[window.Ticks() / 16 % std::size(offsets)]);
+    }
+
+    return {};
+}
+
 void ShipPartBlocks::PreRender() const
 {
-    // Bounding box:
-    // r.iquad(pos - game.get<Camera>()->pos, map.cells.size() * ShipGrid::tile_size).color(fvec3(0)).alpha(0.1f);
-
-    map.Render<TileDrawMethods::RenderMode::pre>(game.get<Camera>()->pos - pos);
-
-    // ID:
-    // r.itext(pos - game.get<Camera>()->pos + map.cells.size() * ShipGrid::tile_size / 2, Graphics::Text(Fonts::main, FMT("{}", dynamic_cast<const Game::Entity &>(*this).id().get_value()))).align(ivec2(0)).color(fvec3(1,0,0));
+    map.Render<TileDrawMethods::RenderMode::pre>(game.get<Camera>()->pos - pos - RenderOffset());
 }
 
 void ShipPartBlocks::Render() const
@@ -68,7 +73,7 @@ void ShipPartBlocks::Render() const
     // Bounding box:
     // r.iquad(pos - game.get<Camera>()->pos, map.cells.size() * ShipGrid::tile_size).color(fvec3(0)).alpha(0.1f);
 
-    map.Render<TileDrawMethods::RenderMode::normal>(game.get<Camera>()->pos - pos);
+    map.Render<TileDrawMethods::RenderMode::normal>(game.get<Camera>()->pos - pos - RenderOffset());
 
     // ID:
     // r.itext(pos - game.get<Camera>()->pos + map.cells.size() * ShipGrid::tile_size / 2, Graphics::Text(Fonts::main, FMT("{}", dynamic_cast<const Game::Entity &>(*this).id().get_value()))).align(ivec2(0)).color(fvec3(1,0,0));
@@ -155,9 +160,9 @@ ShipPartPiston::ExtendRetractStatus ShipPartPiston::ExtendOrRetract(bool extend)
     dir_flip_flop = !dir_flip_flop;
 
     if (move_b)
-        MoveShipParts(AddDraggedParts(push_program_b.at_least_one_pushed ? push_program_b.all_pushed_parts : parts_b, tree), offset_b);
+        MoveShipParts(AddDraggedParts(push_program_b.at_least_one_pushed ? push_program_b.all_pushed_parts : parts_b, offset_b, map, tree), offset_b);
     else
-        MoveShipParts(AddDraggedParts(push_program_a.at_least_one_pushed ? push_program_a.all_pushed_parts : parts_a, tree), offset_a);
+        MoveShipParts(AddDraggedParts(push_program_a.at_least_one_pushed ? push_program_a.all_pushed_parts : parts_a, offset_a, map, tree), offset_a);
 
     // We exclude this piston from `parts_{a,b}`, so we need to manually update it.
     UpdateAabb();
@@ -209,7 +214,7 @@ void GravityController::Tick()
     MoveShipsByGravity(dir, acc, max_speed);
 }
 
-void DecomposeToComponentsAndDelete(ShipPartBlocks &self)
+void DecomposeToComponentsAndDelete(ShipPartBlocks &self, std::function<void(ShipPartBlocks &blocks)> finalize_blocks)
 {
     // Whether this tile is not empty and not special for splitting purposes.
     auto IsRegularTile = [&](ShipGrid::Tile tile)
@@ -337,6 +342,9 @@ void DecomposeToComponentsAndDelete(ShipPartBlocks &self)
             new_part.pos = self.pos + new_part_tile_offset * ShipGrid::tile_size;
 
             new_part.UpdateAabb();
+
+            if (finalize_blocks)
+                finalize_blocks(new_part);
         }
     }
 
@@ -492,6 +500,9 @@ bool CollideShipParts(
                 if (push->allowed_entities && !push->allowed_entities(e))
                     return true; // We're not allowed to move this.
 
+                if (auto blocks = e.get_opt<ShipPartBlocks>(); blocks && !blocks->can_move)
+                    return true; // Those are immovable blocks.
+
                 if (collide(offset))
                     return true; // Even if that entity moved, we still wouldn't be able to move.
 
@@ -530,7 +541,7 @@ bool CollideShipParts(
     return false;
 }
 
-ConnectedShipParts AddDraggedParts(const ConnectedShipParts &parts, const DynamicSolidTree *tree)
+ConnectedShipParts AddDraggedParts(const ConnectedShipParts &parts, ivec2 offset, const MapObject *map, const DynamicSolidTree *tree)
 {
     if (!tree)
         return parts;
@@ -550,7 +561,22 @@ ConnectedShipParts AddDraggedParts(const ConnectedShipParts &parts, const Dynami
             return false;
 
         if (collide(ivec2{}))
-            new_parts.Append(FindConnectedShipParts(&e));
+        {
+            if (auto blocks = e.get_opt<ShipPartBlocks>(); blocks && !blocks->can_move)
+                return false; // Immovable blocks.
+
+            auto dragged_parts = FindConnectedShipParts(&e);
+
+            bool can_move = !CollideShipParts(dragged_parts, offset, map, tree, nullptr, [&](Game::Entity &e, std::function<bool(ivec2 offset)> collide)
+            {
+                if (parts.entity_ids.contains(e.id()))
+                    return false;
+                return collide(ivec2{});
+            });
+
+            if (can_move)
+                new_parts.Append(dragged_parts);
+        }
 
         return false;
     });
@@ -588,13 +614,15 @@ void MoveShipsByGravity(ivec2 dir, float acc, float max_speed, DynamicSolidTree:
 
         auto &blocks = blocks_entity.get<ShipPartBlocks>();
 
-        if (dir != blocks.gravity.last_dir)
+        if (dir != blocks.gravity.last_dir || !blocks.gravity.enabled)
         {
             // Gravity direction changed, reset speed.
-            blocks.gravity.last_dir = dir;
+            blocks.gravity.last_dir = blocks.gravity.enabled ? dir : ivec2{};
             blocks.gravity.speed = 0;
             blocks.gravity.speed_comp = 0;
         }
+        if (!blocks.gravity.enabled)
+            continue;
 
         clamp_var_max(blocks.gravity.speed += acc, max_speed);
 

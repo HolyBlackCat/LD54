@@ -47,3 +47,11 @@ struct GuiRenderable
     virtual void GuiRender() const = 0;
 };
 using AllGuiRenderable = Game::Category<Ent::OrderedList, GuiRenderable>;
+
+struct FadeRenderable
+{
+    IMP_COMPONENT(Game)
+
+    virtual void FadeRender() const = 0;
+};
+using AllFadeRenderable = Game::Category<Ent::OrderedList, FadeRenderable>;
