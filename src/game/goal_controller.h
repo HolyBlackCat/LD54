@@ -7,6 +7,7 @@ struct GoalController : Tickable, GuiRenderable, FadeRenderable
     IMP_STANDALONE_COMPONENT(Game)
 
     phmap::flat_hash_set<Game::Id> goal_blocks;
+    phmap::flat_hash_set<Game::Id> grav_blocks;
 
     bool fading_out = false;
 

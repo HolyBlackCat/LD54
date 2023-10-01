@@ -102,6 +102,7 @@ struct ShipGridData
         piston_h, // Those are only used temporarily, until the ship is split into sections.
         piston_v, // Then pistons become entities.
         goal,
+        emerald,
         _count [[maybe_unused]]
     };
 
@@ -130,9 +131,10 @@ struct ShipGridData
     inline static const TileDrawMethods::DualGridPass<ShipGridData> dual_grid_passes[] = {
         {.tiles = {Tile::block}, .tex = ivec2(0,0), .alpha = 1},
         {.tiles = {Tile::goal}, .tex = ivec2(0,4), .alpha = 1},
+        {.tiles = {Tile::emerald}, .tex = ivec2(0,5), .alpha = 1},
     };
     inline static const TileDrawMethods::DualGridPass<ShipGridData> dual_grid_pre_passes[] = {
-        {.tiles = {Tile::block, Tile::goal}, .tex = ivec2(0,1), .alpha = 1},
+        {.tiles = {Tile::block, Tile::goal, Tile::emerald}, .tex = ivec2(0,1), .alpha = 1},
     };
 };
 using ShipGrid = BasicGrid<ShipGridData>;

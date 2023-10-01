@@ -1,5 +1,11 @@
 #include "ship.h"
 
+static ivec2 GlobalFloatingOffset()
+{
+    int offsets[] = {1,0};
+    return ivec2(0, offsets[window.Ticks() / 130 % std::size(offsets)]);
+}
+
 bool DynamicSolidTree::BoxCollisionTest(
     irect2 box,
     EntityFilterFunc entity_filter,
@@ -54,11 +60,8 @@ void ShipPartBlocks::Tick()
 
 ivec2 ShipPartBlocks::RenderOffset() const
 {
-    if (can_move && !gravity.enabled)
-    {
-        int offsets[] = {1,0};
-        return ivec2(0, offsets[window.Ticks() / 130 % std::size(offsets)]);
-    }
+    if (can_move && (!gravity.enabled || !game.get<GravityController>()->emerald_enabled))
+        return GlobalFloatingOffset();
 
     return {};
 }
@@ -135,7 +138,7 @@ ShipPartPiston::ExtendRetractStatus ShipPartPiston::ExtendOrRetract(bool extend,
     bool ground_b = false;
 
     ivec2 gravity;
-    if (auto con = game.get<GravityController>().get_opt())
+    if (auto con = game.get<GravityController>().get_opt(); con && con->IsEnabled())
         gravity = con->dir;
     if (gravity)
     {
@@ -187,12 +190,16 @@ void ShipPartPiston::RenderLow(bool pre) const
     int remaining_pixel_len = pos_b[is_vertical] - pos_a[is_vertical];
     int num_segments = (remaining_pixel_len + segment_length - 1) / segment_length;
 
+    ivec2 offset;
+    if (!game.get<GravityController>()->emerald_enabled)
+        offset = GlobalFloatingOffset();
+
     for (int i = 0; i < num_segments; i++)
     {
         ivec2 sprite_size(clamp_max(segment_length, remaining_pixel_len), width);
         remaining_pixel_len -= segment_length;
 
-        auto quad = r.iquad(pos_a + ivec2::axis(is_vertical, segment_length * i),
+        auto quad = r.iquad(pos_a + offset + ivec2::axis(is_vertical, segment_length * i),
             "ship_tiles"_image with(= (_.a + ivec2(1,2) * ShipGrid::tile_size + ivec2(segment_length * pre, 0)).rect_size(sprite_size))).pixel_center(fvec2{});
         if (is_vertical)
             quad.flip_x(is_vertical).matrix(ivec2(0,-1).to_rotation_matrix());
@@ -213,7 +220,7 @@ void ShipPartPiston::Render() const
 
 void GravityController::Tick()
 {
-    if (enabled)
+    if (IsEnabled())
         MoveShipsByGravity(dir, acc, max_speed);
 }
 
@@ -550,7 +557,7 @@ ConnectedShipParts AddDraggedParts(const ConnectedShipParts &parts, ivec2 offset
         return parts;
 
     ivec2 gravity;
-    if (auto con = game.get<GravityController>().get_opt())
+    if (auto con = game.get<GravityController>().get_opt(); con && con->IsEnabled())
         gravity = con->dir;
     if (!gravity)
         return parts;

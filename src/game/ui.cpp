@@ -43,6 +43,8 @@ bool PistonMouseController::MouseFocusTick()
             active_piston_id = {};
     }
 
+    bool destroy_bad_piston = false;
+
     if (auto active_piston_entity = game.get_opt(active_piston_id))
     {
         auto &active_piston = active_piston_entity->get<ShipPartPiston>();
@@ -50,6 +52,9 @@ bool PistonMouseController::MouseFocusTick()
         if (control)
         {
             auto status = active_piston.ExtendOrRetract(control > 0, 400);
+            if (status == ShipPartPiston::ExtendRetractStatus::cycle)
+                destroy_bad_piston = true;
+
             if (ShipPartPiston::ExtendOrRetractWasSuccessful(status))
             {
                 now_moved_once = true;
@@ -74,6 +79,13 @@ bool PistonMouseController::MouseFocusTick()
     }
 
     clamp_var(anim_timer += (active_piston_id.is_nonzero() ? 1 : -1) * 0.17f);
+
+    if (destroy_bad_piston)
+    {
+        audio.Play("piston_limit"_sound, 1, (ra.f.abs() <= 0.3f) - 0.2f);
+        game.destroy(game.get(active_piston_id));
+        active_piston_id = {};
+    }
 
     return active_piston_id.is_nonzero();
 }

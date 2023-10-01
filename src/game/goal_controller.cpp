@@ -9,14 +9,12 @@ bool GoalController::ShouldReloadLevel() const
 
 void GoalController::Tick()
 {
-    // Check condition.
-    if (!fading_out)
-    {
-        auto map = game.get<MapObject>().get_opt();
-        auto tree = game.get<DynamicSolidTree>().get_opt();
+    auto tree = game.get<DynamicSolidTree>().get_opt();
 
-        bool ok = !goal_blocks.empty();
-        for (Game::Id id : goal_blocks)
+    auto AllBlocksInserted = [&](const phmap::flat_hash_set<Game::Id> &set)
+    {
+        bool ok = !set.empty();
+        for (Game::Id id : set)
         {
             ConnectedShipParts parts;
             parts.AddSingleBlocksObject(id);
@@ -25,9 +23,9 @@ void GoalController::Tick()
 
             for (int i = 0; i < 4; i++)
             {
-                bool hit = CollideShipParts(parts, ivec2::dir4(i), map, tree, [&](const Game::Entity &e)
+                bool hit = CollideShipParts(parts, ivec2::dir4(i), nullptr, tree, [&](const Game::Entity &e)
                 {
-                    return e.id() != id && goal_blocks.contains(e.id());
+                    return e.id() != id && set.contains(e.id());
                 });
 
                 if (hit)
@@ -40,13 +38,18 @@ void GoalController::Tick()
                 break;
             }
         }
+        return ok;
+    };
 
-        if (ok)
-        {
-            fading_out = true;
-            audio.Play("level_transition"_sound, 1, ra.f.abs() <= 0.2f);
-        }
+    // Check win condition.
+    if (!fading_out && AllBlocksInserted(goal_blocks))
+    {
+        fading_out = true;
+        audio.Play("level_transition"_sound, 1, ra.f.abs() <= 0.2f);
     }
+
+    // Check gravity condition.
+    game.get<GravityController>()->emerald_enabled = grav_blocks.empty() || AllBlocksInserted(grav_blocks);
 
     // Check goal bricks falling out.
     if (!fading_out && !level_failed)

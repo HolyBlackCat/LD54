@@ -227,6 +227,11 @@ struct GravityController :
     // The editor enables it when done editing.
     bool enabled = true;
 
+    // Goal controller sets this to true when all emeralds are inserted, or there are none.
+    bool emerald_enabled = false;
+
+    [[nodiscard]] bool IsEnabled() const {return enabled && emerald_enabled;}
+
     ivec2 dir = ivec2(0,1);
     float acc = 0.1f;
     float max_speed = 2;

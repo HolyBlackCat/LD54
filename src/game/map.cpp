@@ -27,6 +27,7 @@ auto ShipGridData::GetRawTileInfoArray() -> std::array<TileInfo, std::to_underly
         { .tile = Tile::piston_h, .solid = true,  .draw = SimpleTile{ivec2(0,2)}, .piston = PistonRelation::piston,               },
         { .tile = Tile::piston_v, .solid = true,  .draw = SimpleTile{ivec2(0,3)}, .piston = PistonRelation::piston,               },
         { .tile = Tile::goal,     .solid = true,  .draw = Invis{}/*dual grid*/,   .piston = PistonRelation::solid_non_attachable, },
+        { .tile = Tile::emerald,  .solid = true,  .draw = Invis{}/*dual grid*/,   .piston = PistonRelation::solid_non_attachable, },
     }};
 
     return ret;
@@ -41,10 +42,12 @@ MapObject::MapObject(Stream::Input input)
         bool nograv = false;
         bool fixed = false;
         bool goal = false;
+        bool grav = false; // Toggles gravity.
         phmap::flat_hash_map<std::string, std::function<void()>> funcs = {
             {"nograv", [&]{nograv = true;}},
             {"fixed", [&]{fixed = true;}},
             {"goal", [&]{goal = true;}},
+            {"grav", [&]{grav = true;}},
         };
 
         auto sep = suffix.find_first_of(',');
@@ -73,6 +76,8 @@ MapObject::MapObject(Stream::Input input)
 
             if (goal)
                 game.get<GoalController>()->goal_blocks.insert(dynamic_cast<Game::Entity &>(blocks).id());
+            if (grav)
+                game.get<GoalController>()->grav_blocks.insert(dynamic_cast<Game::Entity &>(blocks).id());
         });
     });
 
