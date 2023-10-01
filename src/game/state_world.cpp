@@ -61,8 +61,8 @@ namespace States
             }
 
             // Load the next level if we're finished.
-            if (auto goal = game.get<GoalController>().get_opt(); goal && goal->ShouldSwitchToNextLevel())
-                LoadLevel(cur_level_index + 1);
+            if (auto goal = game.get<GoalController>().get_opt(); goal && goal->ShouldReloadLevel())
+                LoadLevel(cur_level_index + !goal->level_failed);
 
             // Tick.
             for (auto &e : game.get<AllTickable>())

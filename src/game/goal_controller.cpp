@@ -2,15 +2,15 @@
 
 #include "game/ship.h"
 
-bool GoalController::ShouldSwitchToNextLevel() const
+bool GoalController::ShouldReloadLevel() const
 {
-    return condition_met && fade_timer > 0.999f;
+    return fading_out && fade_timer > 0.999f;
 }
 
 void GoalController::Tick()
 {
     // Check condition.
-    if (!condition_met)
+    if (!fading_out)
     {
         auto map = game.get<MapObject>().get_opt();
         auto tree = game.get<DynamicSolidTree>().get_opt();
@@ -42,14 +42,28 @@ void GoalController::Tick()
         }
 
         if (ok)
-            condition_met = true;
+            fading_out = true;
+    }
+
+    // Check goal bricks falling out.
+    if (!fading_out && !level_failed)
+    {
+        for (auto id : goal_blocks)
+        {
+            int y = game.get(id).get<ShipPartBlocks>().pos.y - game.get<Camera>()->pos.y;
+            if (y > screen_size.y/2 + 2)
+            {
+                level_failed = true;
+                fading_out = true;
+            }
+        }
     }
 
     // Update timers.
     if (initial_delay > 0)
         initial_delay--;
-    if (condition_met || initial_delay == 0)
-        clamp_var(fade_timer += (condition_met ? 1 : -1) * 0.02f);
+    if (fading_out || initial_delay == 0)
+        clamp_var(fade_timer += (fading_out ? 1 : -1) * 0.02f);
 }
 
 void GoalController::FadeRender() const

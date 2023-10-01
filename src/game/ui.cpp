@@ -47,11 +47,11 @@ bool PistonMouseController::MouseFocusTick()
     {
         auto &active_piston = active_piston_entity->get<ShipPartPiston>();
 
-        last_piston_rect = active_piston.last_rect;
-        last_piston_is_vertical = active_piston.is_vertical;
-
         if (control)
             active_piston.ExtendOrRetract(control > 0);
+
+        last_piston_rect = active_piston.last_rect;
+        last_piston_is_vertical = active_piston.is_vertical;
     }
 
     clamp_var(anim_timer += (active_piston_id.is_nonzero() ? 1 : -1) * 0.17f);
