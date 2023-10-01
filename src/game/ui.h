@@ -23,7 +23,7 @@ struct PistonMouseController : MouseFocusTickable, GuiRenderable
 
 struct ShipEditorController :
     Tickable, MouseFocusTickable,
-    PreRenderable, GuiRenderable
+    GuiRenderable
 {
     IMP_STANDALONE_COMPONENT(Game)
 
@@ -63,11 +63,16 @@ struct ShipEditorController :
 
     Array2D<ShipGrid::Tile, int> cells;
 
+    int world_box_fade_out_timer = 0;
+
+    bool tutorial_mode = false;
+    bool tutorial_erased_at_least_once = false;
+    int tutorial_tooltip_fade_out_timer = 0;
+
     std::vector<ShipGrid::Tile> GetAvailableTileTypes() const;
 
     void Tick() override;
     bool MouseFocusTick() override;
-    void PreRender() const override;
     void GuiRender() const override;
 };
 

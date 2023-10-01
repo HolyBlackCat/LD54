@@ -85,7 +85,7 @@ struct Application : Program::DefaultBasicState
     }
 
 
-    void Init()
+    void Init(int level_index)
     {
         // Initialize ImGui.
         ImGui::StyleColorsDark();
@@ -126,14 +126,25 @@ struct Application : Program::DefaultBasicState
 
         Audio::GlobalData::Load(Audio::mono, Audio::wav, Program::ExeDir() + "assets/sounds/");
 
-        state_manager.SetState("World{}");
+        state_manager.SetState(FMT("World{{cur_level_index={}}}", level_index));
     }
 };
 
-IMP_MAIN(,)
+IMP_MAIN(argc, argv)
 {
+    int level_index = 1;
+    if (argc > 2)
+        throw std::runtime_error("Need at most two arguments.");
+    if (argc == 2)
+    {
+        std::string_view prefix = "--level=";
+        if (!std::string_view(argv[1]).starts_with(prefix))
+            throw std::runtime_error("The argument must be `--mode=NUM`.");
+        level_index = Refl::FromString<int>(argv[1] + prefix.size());
+    }
+
     Application app;
-    app.Init();
+    app.Init(level_index);
     app.Resize();
     app.RunMainLoop();
     return 0;

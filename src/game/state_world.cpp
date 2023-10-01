@@ -11,9 +11,9 @@ namespace States
 {
     STRUCT( World EXTENDS StateBase )
     {
-        MEMBERS()
-
-        int cur_level_index = 0;
+        MEMBERS(
+            DECL(int INIT=1) cur_level_index
+        )
 
         void LoadLevel(int index)
         {
@@ -38,7 +38,7 @@ namespace States
             Audio::ListenerOrientation(fvec3(0,0,1), fvec3(0,-1,0));
             Audio::Source::DefaultRefDistance(audio_distance);
 
-            LoadLevel(1);
+            LoadLevel(cur_level_index);
         }
 
         void Tick(std::string &next_state) override

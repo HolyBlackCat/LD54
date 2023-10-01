@@ -95,7 +95,7 @@ int ShipPartPiston::DistanceToPoint(ivec2 point) const
     return ret;
 }
 
-ShipPartPiston::ExtendRetractStatus ShipPartPiston::ExtendOrRetract(bool extend)
+ShipPartPiston::ExtendRetractStatus ShipPartPiston::ExtendOrRetract(bool extend, int max_length)
 {
     constexpr int min_length = ShipGrid::tile_size;
 
@@ -104,6 +104,8 @@ ShipPartPiston::ExtendRetractStatus ShipPartPiston::ExtendOrRetract(bool extend)
 
     if (!extend && current_length <= min_length)
         return ExtendRetractStatus::at_min_length; // At minimal length.
+    if (extend && current_length >= max_length)
+        return ExtendRetractStatus::at_max_length; // At maximal length.
 
     ConnectedShipParts parts_a = FindConnectedShipParts(this, true);
     ConnectedShipParts parts_b = FindConnectedShipParts(this, false);

@@ -20,6 +20,8 @@ namespace Draw
             return fvec3(0.7f,1,0);
           case Color::danger:
             return fvec3(1,0,0.25f);
+          case Color::neutral:
+            return fvec3(1,1,1);
         }
         return {};
     }
@@ -30,7 +32,7 @@ namespace Draw
 
         irect2 inner_rect = rect.expand(1);
         fvec3 inner_rect_color = ColorFromEnum(color);
-        float inner_rect_alpha = 1;
+        float inner_rect_alpha = alpha;
         float inner_rect_beta = 0.55f;
 
         if (filled)

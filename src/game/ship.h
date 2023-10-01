@@ -199,6 +199,7 @@ struct ShipPartPiston :
         ok_pushed, // Successfully changed length, but had to push something.
         stuck, // Can't move, something solid is interfering.
         at_min_length, // Can't move, already at minimal length.
+        at_max_length, // Can't move, already at maximal length.
         cycle, // Can't move, the parts form a cycle that includes this piston.
     };
     [[nodiscard]] static constexpr bool ExtendOrRetractWasSuccessful(ExtendRetractStatus status)
@@ -207,7 +208,7 @@ struct ShipPartPiston :
     }
 
     // Try to extend or retract the piston by one pixel.
-    ExtendRetractStatus ExtendOrRetract(bool extend);
+    ExtendRetractStatus ExtendOrRetract(bool extend, int max_length);
 
     void Tick() override;
 

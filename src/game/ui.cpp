@@ -49,7 +49,7 @@ bool PistonMouseController::MouseFocusTick()
 
         if (control)
         {
-            active_piston.ExtendOrRetract(control > 0);
+            active_piston.ExtendOrRetract(control > 0, 400);
 
             for (auto &tooltip : game.get<Game::Category<Ent::UnorderedList, Tooltip>>())
             {
@@ -98,6 +98,11 @@ std::vector<ShipGrid::Tile> ShipEditorController::GetAvailableTileTypes() const
 void ShipEditorController::Tick()
 {
     clamp_var(shown_anim_timer += (shown ? 1 : -1) * 0.05f);
+    if (!initial_preview && !shown)
+        world_box_fade_out_timer++;
+
+    if (tutorial_mode && tutorial_erased_at_least_once)
+        tutorial_tooltip_fade_out_timer++;
 
     has_mouse_focus = shown;
 
@@ -166,6 +171,8 @@ bool ShipEditorController::MouseFocusTick()
             {
                 // Remove block.
                 rect_style = Draw::Color::danger;
+                if (cells.safe_nonthrowing_at(hovered_tile) != ShipGrid::Tile::air)
+                    tutorial_erased_at_least_once = true;
                 cells.safe_nonthrowing_at(hovered_tile) = ShipGrid::Tile::air;
             }
         }
@@ -211,13 +218,14 @@ bool ShipEditorController::MouseFocusTick()
     return shown || play_pause_hovered;
 }
 
-void ShipEditorController::PreRender() const
-{
-    r.iquad(world_pos - game.get<Camera>()->pos, cells.size() * ShipGrid::tile_size).color(fvec3(1)).alpha(0.2f);
-}
-
 void ShipEditorController::GuiRender() const
 {
+    { // World box.
+        float alpha = smoothstep(1 - clamp((world_box_fade_out_timer - 60) / 120.f));
+
+        Draw::StyledRect(world_pos.rect_size(cells.size() * ShipGrid::tile_size) - game.get<Camera>()->pos, Draw::Color::neutral, 0.2f * alpha);
+    }
+
     if (shown_anim_timer > 0.001f)
     {
         float t = smoothstep(shown_anim_timer);
@@ -351,6 +359,14 @@ void ShipEditorController::GuiRender() const
 
             cur.y += tile_selector_step;
         }
+
+        // Tutorial tooltip.
+        if (tutorial_mode)
+        {
+            float alpha = (1 - clamp((tutorial_tooltip_fade_out_timer - 60) / 90.f)) * t;
+            if (alpha > 0.001f)
+                r.itext(ivec2(0, screen_size.y/2 - 16), Graphics::Text(Fonts::main, "Left click to place tile, right click to erase")).color(fvec3(1)).alpha(alpha);
+        }
     }
 
     // Play/pause button.
@@ -403,6 +419,6 @@ void Tooltip::GuiRender() const
     float alpha = min(clamp((timer - 120) / 90.f), 1 - clamp((timer2 - 60) / 90.f));
 
     for (int i = 0; i < 8; i++)
-        r.itext(text_pos + ivec2::dir8(i), Graphics::Text(Fonts::main, text)).align(align).color(fvec3(0)).alpha(smoothstep(clamp(alpha * 2 - 1)) * (i % 2 ? 0.5f : 1.f));
+        r.itext(text_pos + ivec2::dir8(i), Graphics::Text(Fonts::main, text)).align(align).color(fvec3(0)).alpha(smoothstep(clamp(alpha * 2 - 1)) * (i % 2 ? 0.2f : 0.5f));
     r.itext(text_pos, Graphics::Text(Fonts::main, text)).align(align).color(fvec3(1)).alpha(smoothstep(clamp(alpha * 2)));
 }

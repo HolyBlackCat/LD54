@@ -92,6 +92,7 @@ MapObject::MapObject(Stream::Input input)
 
         Stream::Input input = Stream::ReadOnlyData::mem_reference(suffix);
         ivec2 box_size;
+        bool tutorial_mode = input.Discard<Stream::if_present>('?');
         input.Discard(':');
         Refl::InterfaceFor(box_size.x).FromString(box_size.x, input, {}, Refl::initial_state);
         input.Discard(':');
@@ -101,5 +102,6 @@ MapObject::MapObject(Stream::Input input)
         auto &con = game.create<ShipEditorController>();
         con.world_pos = iround(pos) with(.x -= box_size.x * ShipGrid::tile_size / 2, .y -= box_size.y * ShipGrid::tile_size);
         con.cells.resize(box_size);
+        con.tutorial_mode = tutorial_mode;
     });
 }

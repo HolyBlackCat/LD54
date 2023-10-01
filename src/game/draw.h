@@ -10,6 +10,7 @@ namespace Draw
     {
         selection,
         danger,
+        neutral,
     };
     [[nodiscard]] fvec3 ColorFromEnum(Color color);
 
