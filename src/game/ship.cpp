@@ -90,7 +90,7 @@ int ShipPartPiston::DistanceToPoint(ivec2 point) const
     return ret;
 }
 
-ShipPartPiston::ExtendRetractStatus ShipPartPiston::ExtendOrRetract(bool extend, bool gravity_tweaks)
+ShipPartPiston::ExtendRetractStatus ShipPartPiston::ExtendOrRetract(bool extend)
 {
     constexpr int min_length = ShipGrid::tile_size;
 
@@ -127,10 +127,11 @@ ShipPartPiston::ExtendRetractStatus ShipPartPiston::ExtendOrRetract(bool extend,
     bool ground_a = false;
     bool ground_b = false;
 
-    if (gravity_tweaks)
+    ivec2 gravity;
+    if (auto con = game.get<GravityController>().get_opt())
+        gravity = con->dir;
+    if (gravity)
     {
-        ivec2 gravity(0,1);
-
         // Need to exclude both sets for both calls.
         // Imagine if A rubs the ground, but B rubs only A. If the lambdas were different,
         // they'd both have ground flags, which is wrong. Only A should have it in this case.
@@ -201,6 +202,11 @@ void ShipPartPiston::PreRender() const
 void ShipPartPiston::Render() const
 {
     RenderLow(false);
+}
+
+void GravityController::Tick()
+{
+    MoveShipsByGravity(dir, acc, max_speed);
 }
 
 void DecomposeToComponentsAndDelete(ShipPartBlocks &self)
@@ -532,4 +538,56 @@ void MoveShipParts(const ConnectedShipParts &parts, ivec2 offset)
     // Pistons don't store their position (other than in AABB), so it doesn't need to be updated.
     for (const auto &piston : parts.pistons)
         piston->UpdateAabb();
+}
+
+void MoveShipsByGravity(ivec2 dir, float acc, float max_speed, DynamicSolidTree::EntityFilterFunc filter)
+{
+    phmap::flat_hash_set<Game::Id> visited_ids;
+
+    auto map = game.get<MapObject>().get_opt();
+    auto tree = game.get<DynamicSolidTree>().get_opt();
+
+    for (auto &blocks_entity : game.get<Game::Category<Ent::OrderedList, ShipPartBlocks>>())
+    {
+        if (visited_ids.contains(blocks_entity.id()))
+            continue;
+
+        if (filter && !filter(blocks_entity))
+            continue;
+
+        auto &blocks = blocks_entity.get<ShipPartBlocks>();
+
+        if (dir != blocks.gravity.last_dir)
+        {
+            // Gravity direction changed, reset speed.
+            blocks.gravity.last_dir = dir;
+            blocks.gravity.speed = 0;
+            blocks.gravity.speed_comp = 0;
+        }
+
+        clamp_var_max(blocks.gravity.speed += acc, max_speed);
+
+        int step = Math::round_with_compensation(blocks.gravity.speed, blocks.gravity.speed_comp);
+
+        auto parts = FindConnectedShipParts(&blocks);
+        visited_ids.insert(parts.entity_ids.begin(), parts.entity_ids.end());
+
+        while (step > 0)
+        {
+            step--;
+            if (!CollideShipParts(parts, dir, map, tree))
+            {
+                MoveShipParts(parts, dir);
+            }
+            else
+            {
+                blocks.gravity.speed = 0;
+                blocks.gravity.speed_comp = 0;
+            }
+        }
+
+        // Copy the gravity state to all connected parts.
+        for (auto other_blocks : parts.blocks)
+            other_blocks->gravity = blocks.gravity;
+    }
 }

@@ -106,6 +106,16 @@ struct ShipPartBlocks :
     ivec2 pos;
     Map<ShipGrid> map;
 
+    struct Gravity
+    {
+        float speed = 0;
+        float speed_comp = 0;
+        // Which direction the gravity was applied last. When it changes, we reset the velocity.
+        ivec2 last_dir;
+    };
+    Gravity gravity;
+
+
     irect2 CalculateRect() const
     {
         return pos.rect_size(map.cells.size() * ShipGrid::tile_size);
@@ -191,8 +201,7 @@ struct ShipPartPiston :
     }
 
     // Try to extend or retract the piston by one pixel.
-    // If `gravity_tweaks` is true, assume that gravity is present and apply some tweaks for that.
-    ExtendRetractStatus ExtendOrRetract(bool extend, bool gravity_tweaks);
+    ExtendRetractStatus ExtendOrRetract(bool extend);
 
     void Tick() override;
 
@@ -200,6 +209,20 @@ struct ShipPartPiston :
     void PreRender() const override;
     void Render() const override;
 };
+
+// Applies configurable gravity to all ships.
+struct GravityController :
+    Tickable
+{
+    IMP_STANDALONE_COMPONENT(Game)
+
+    ivec2 dir = ivec2(0,1);
+    float acc = 0.1f;
+    float max_speed = 2;
+
+    void Tick() override;
+};
+
 
 // Split this ship into multiple entities, by continuous map regions.
 // This entity itself is then destroyed.
@@ -265,3 +288,6 @@ struct PushParams
 
 // Moves the `parts` by the `offset`, and updates their AABB boxes.
 void MoveShipParts(const ConnectedShipParts &parts, ivec2 offset);
+
+// Move ships by offset `gravity`, either all of them or those matching `fitler.
+void MoveShipsByGravity(ivec2 dir, float acc, float max_speed, DynamicSolidTree::EntityFilterFunc filter = nullptr);
