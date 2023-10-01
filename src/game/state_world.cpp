@@ -88,7 +88,8 @@ namespace States
 
             r.BindShader();
 
-            r.iquad(ivec2(), screen_size).center().color(fvec3(0.6f));
+            // Background.
+            r.iquad(ivec2(), "sky"_image).center();
 
             for (auto &e : game.get<Game::Category<Ent::OrderedList, MapObject>>())
                 e.get<MapObject>().RenderMap();
@@ -96,6 +97,10 @@ namespace States
                 e.get<PreRenderable>().PreRender();
             for (auto &e : game.get<AllRenderable>())
                 e.get<Renderable>().Render();
+
+            // Vignette.
+            r.iquad(ivec2(), "vignette"_image).center().color(fvec3(0.2f, 0.45f, 0.8f)).mix(0).alpha(0.2f);
+
             for (auto &e : game.get<AllGuiRenderable>())
                 e.get<GuiRenderable>().GuiRender();
             for (auto &e : game.get<AllFadeRenderable>())

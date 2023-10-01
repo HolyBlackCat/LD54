@@ -80,6 +80,10 @@ struct WorldGridData
 
     static const Graphics::Region &GetImage() {return "tiles"_image;}
     static auto GetRawTileInfoArray() -> std::array<TileInfo, std::to_underlying(Tile::_count)>;
+
+    inline static const TileDrawMethods::DualGridPass<WorldGridData> dual_grid_passes[] = {
+        {.tiles = {Tile::wall}, .tex = ivec2(0,0), .alpha = 1},
+    };
 };
 using WorldGrid = BasicGrid<WorldGridData>;
 

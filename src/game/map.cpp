@@ -10,7 +10,7 @@ auto WorldGridData::GetRawTileInfoArray() -> std::array<TileInfo, std::to_underl
 
     std::array<TileInfo, std::to_underlying(Tile::_count)> ret = {{
         { .tile = Tile::air,  .solid = false, .draw = Invis{}, },
-        { .tile = Tile::wall, .solid = true,  .draw = SimpleTile{ivec2(0,0)}, },
+        { .tile = Tile::wall, .solid = true,  .draw = Invis{}/*dual grid*/, },
     }};
 
     return ret;
