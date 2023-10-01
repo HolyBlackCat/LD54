@@ -132,7 +132,7 @@ struct Application : Program::DefaultBasicState
 
 IMP_MAIN(argc, argv)
 {
-    int level_index = 1;
+    int level_index = 0;
     if (argc > 2)
         throw std::runtime_error("Need at most two arguments.");
     if (argc == 2)

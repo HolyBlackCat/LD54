@@ -66,6 +66,11 @@ void GoalController::Tick()
         clamp_var(fade_timer += (fading_out ? 1 : -1) * 0.02f);
 }
 
+void GoalController::GuiRender() const
+{
+    r.itext(ivec2(0, -screen_size.y/2 + 15), Graphics::Text(Fonts::main, level_name)).color(fvec3(0.2f, 0.45f, 0.8f)).alpha(0.75f);
+}
+
 void GoalController::FadeRender() const
 {
     if (fade_timer > 0.001f)

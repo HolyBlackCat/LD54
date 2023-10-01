@@ -5,6 +5,7 @@
 #include "game/map.h"
 #include "game/ship.h"
 #include "game/ui.h"
+#include "utils/filesystem.h"
 
 
 namespace States
@@ -12,8 +13,15 @@ namespace States
     STRUCT( World EXTENDS StateBase )
     {
         MEMBERS(
-            DECL(int INIT=1) cur_level_index
+            DECL(int INIT=0) cur_level_index
         )
+
+        int max_level_index = 0;
+
+        static std::string LevelIndexToFilename(int index)
+        {
+            return FMT("{}assets/maps/{}.json", Program::ExeDir(), index);
+        }
 
         void LoadLevel(int index)
         {
@@ -24,9 +32,9 @@ namespace States
             game.create<DynamicSolidTree>();
             game.create<PistonMouseController>();
             game.create<GravityController>();
-            game.create<GoalController>();
+            game.create<GoalController>().level_name = index == 0 ? "" : FMT("{}/{}", index, max_level_index);
 
-            game.create<MapObject>(FMT("{}assets/maps/{}.json", Program::ExeDir(), index));
+            game.create<MapObject>(LevelIndexToFilename(index));
             game.create<Camera>().pos = game.get<MapObject>()->map.cells.size() * WorldGrid::tile_size / 2;
         }
 
@@ -37,6 +45,16 @@ namespace States
             Audio::ListenerPosition(fvec3(0, 0, -audio_distance));
             Audio::ListenerOrientation(fvec3(0,0,1), fvec3(0,-1,0));
             Audio::Source::DefaultRefDistance(audio_distance);
+
+            // Count the levels.
+            while (true)
+            {
+                bool ok = true;
+                (void)Filesystem::GetObjectInfo(LevelIndexToFilename(max_level_index + 1), &ok);
+                if (!ok)
+                    break;
+                max_level_index++;
+            }
 
             LoadLevel(cur_level_index);
         }

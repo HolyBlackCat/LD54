@@ -2,7 +2,7 @@
 
 #include "game/entities.h"
 
-struct GoalController : Tickable, FadeRenderable
+struct GoalController : Tickable, GuiRenderable, FadeRenderable
 {
     IMP_STANDALONE_COMPONENT(Game)
 
@@ -16,8 +16,11 @@ struct GoalController : Tickable, FadeRenderable
     float fade_timer = 1;
     int initial_delay = 15;
 
+    std::string level_name;
+
     [[nodiscard]] bool ShouldReloadLevel() const;
 
     void Tick() override;
+    void GuiRender() const override;
     void FadeRender() const override;
 };
