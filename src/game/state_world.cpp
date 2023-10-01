@@ -17,6 +17,17 @@ namespace States
         )
 
         int max_level_index = 0;
+        bool is_fullscreen = false;
+
+        void ToggleFullscreen()
+        {
+            if (is_fullscreen)
+                window.SetMode(Interface::windowed);
+            else
+                window.SetMode(Interface::borderless_fullscreen);
+
+            is_fullscreen = !is_fullscreen;
+        }
 
         static std::string LevelIndexToFilename(int index)
         {
@@ -40,6 +51,9 @@ namespace States
 
         void Init() override
         {
+            if (IMP_PLATFORM_IS(prod))
+                ToggleFullscreen();
+
             // Configure the audio.
             float audio_distance = screen_size.x * 3;
             Audio::ListenerPosition(fvec3(0, 0, -audio_distance));
@@ -63,6 +77,10 @@ namespace States
         {
             (void)next_state;
 
+            // Toggle fullscreen.
+            if ((Input::Button(Input::l_alt).down() || Input::Button(Input::r_alt).down()) && Input::Button(Input::enter).pressed())
+                ToggleFullscreen();
+
             // Reload the level if needed (this should be first).
             if (auto editor = game.get<ShipEditorController>().get_opt(); editor && editor->want_level_reload)
             {
@@ -71,7 +89,7 @@ namespace States
                 LoadLevel(cur_level_index);
                 game.get<ShipEditorController>()->initial_preview = false;
                 game.get<ShipEditorController>()->shown = true;
-                game.get<ShipEditorController>()->selected_tile = editor_selected_tile;
+                game.get<ShipEditorController>()->cells = std::move(editor_cells);
                 game.get<ShipEditorController>()->selected_tile = editor_selected_tile;
                 game.get<GoalController>()->initial_delay = 0;
                 game.get<GoalController>()->fade_timer = 0;
@@ -80,7 +98,13 @@ namespace States
 
             // Load the next level if we're finished.
             if (auto goal = game.get<GoalController>().get_opt(); goal && goal->ShouldReloadLevel())
-                LoadLevel(cur_level_index + !goal->level_failed);
+            {
+                int next_index = cur_level_index + !goal->level_failed;
+                if (next_index > max_level_index)
+                    Program::Exit(1);
+
+                LoadLevel(next_index);
+            }
 
             // Tick.
             for (auto &e : game.get<AllTickable>())

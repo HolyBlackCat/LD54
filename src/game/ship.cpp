@@ -56,8 +56,8 @@ ivec2 ShipPartBlocks::RenderOffset() const
 {
     if (can_move && !gravity.enabled)
     {
-        int offsets[] = {-1,-1,-1,0,0,1,1,1,0,0};
-        return ivec2(0, offsets[window.Ticks() / 16 % std::size(offsets)]);
+        int offsets[] = {1,0};
+        return ivec2(0, offsets[window.Ticks() / 130 % std::size(offsets)]);
     }
 
     return {};
@@ -142,8 +142,8 @@ ShipPartPiston::ExtendRetractStatus ShipPartPiston::ExtendOrRetract(bool extend,
         // Need to exclude both sets for both calls.
         // Imagine if A rubs the ground, but B rubs only A. If the lambdas were different,
         // they'd both have ground flags, which is wrong. Only A should have it in this case.
-        ground_a = offset_a == gravity ? !can_move_a : CollideShipParts(parts_a, gravity, map, tree, parts_b.LambdaNoSuchEntityHere());
-        ground_b = offset_b == gravity ? !can_move_b : CollideShipParts(parts_b, gravity, map, tree, parts_a.LambdaNoSuchEntityHere());
+        ground_a = CollideShipParts(parts_a, gravity, map, tree, [&, l = parts_b.LambdaNoSuchEntityHere()](const Game::Entity &e){if (!l(e)) return false; auto blocks = e.get_opt<ShipPartBlocks>(); if (!blocks) return true; return blocks->gravity.enabled;});
+        ground_b = CollideShipParts(parts_b, gravity, map, tree, [&, l = parts_a.LambdaNoSuchEntityHere()](const Game::Entity &e){if (!l(e)) return false; auto blocks = e.get_opt<ShipPartBlocks>(); if (!blocks) return true; return blocks->gravity.enabled;});
     }
 
     if (!can_move_a && !can_move_b)
@@ -565,7 +565,7 @@ ConnectedShipParts AddDraggedParts(const ConnectedShipParts &parts, ivec2 offset
 
         if (collide(ivec2{}))
         {
-            if (auto blocks = e.get_opt<ShipPartBlocks>(); blocks && !blocks->can_move)
+            if (auto blocks = e.get_opt<ShipPartBlocks>(); blocks && (!blocks->can_move || !blocks->gravity.enabled))
                 return false; // Immovable blocks.
 
             auto dragged_parts = FindConnectedShipParts(&e);
