@@ -45,7 +45,10 @@ struct PistonMouseController : Tickable, GuiRenderable
 
         int control = 0;
         if (active_piston_id.is_nonzero() || best_piston)
+        {
             control = mouse.left.down() - mouse.right.down();
+            // control = Input::Button(Input::d).down() - Input::Button(Input::a).down();
+        }
 
         if (!control)
         {

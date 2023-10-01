@@ -14,10 +14,30 @@ struct DynamicSolidTree
     using Tree = AabbTree<ivec2, Game::Id>;
     Tree aabb_tree;
 
-    DynamicSolidTree() : aabb_tree(ivec2(1)) {}
+    DynamicSolidTree() : aabb_tree(ivec2(2)) {}
 
-    [[nodiscard]] bool BoxCollisionTest(irect2 box, std::function<bool(const Game::Entity &e)> entity_filter = nullptr) const;
-    [[nodiscard]] bool ShipBlocksCollisionTest(const ShipPartBlocks &ship, ivec2 ship_offset, std::function<bool(const Game::Entity &e)> entity_filter = nullptr) const;
+    // AABB boxes should are automatically expanded by this amount before inserting into the tree.
+    static constexpr int slack_margin = 2;
+
+    // Here, if `entity_filter` returns false, the entity is ignored.
+    // `entity_callback` defaults to `return collide(ivec2{});`. You can return false unconditionally to ignore this entity,
+    // or you can change the offset before calling `collide` to imaginarily offset that entity.
+
+    using EntityFilterFunc = std::function<bool(const Game::Entity &e)>;
+    using EntityCallbackFunc = std::function<bool(Game::Entity &e, std::function<bool(ivec2 offset)> collide)>;
+
+    [[nodiscard]] bool BoxCollisionTest(
+        irect2 box,
+        EntityFilterFunc entity_filter = nullptr,
+        EntityCallbackFunc entity_callback = nullptr
+    ) const;
+
+    [[nodiscard]] bool ShipBlocksCollisionTest(
+        const ShipPartBlocks &ship,
+        ivec2 ship_offset,
+        EntityFilterFunc entity_filter = nullptr,
+        EntityCallbackFunc entity_callback = nullptr
+    ) const;
 };
 
 struct DynamicSolid
@@ -40,6 +60,8 @@ struct DynamicSolid
 
     void SetAabb(irect2 aabb)
     {
+        aabb = aabb.expand(DynamicSolidTree::slack_margin);
+
         if (HasAabb())
         {
             game.get<DynamicSolidTree>()->aabb_tree.ModifyNode(node_index, aabb, ivec2(0));
@@ -158,9 +180,16 @@ struct ShipPartPiston :
     enum class ExtendRetractStatus
     {
         ok, // Successfully changed length.
+        ok_pushed, // Successfully changed length, but had to push something.
         stuck, // Can't move, something solid is interfering.
         at_min_length, // Can't move, already at minimal length.
+        cycle, // Can't move, the parts form a cycle that includes this piston.
     };
+    [[nodiscard]] static constexpr bool ExtendOrRetractWasSuccessful(ExtendRetractStatus status)
+    {
+        return status == ExtendRetractStatus::ok || status == ExtendRetractStatus::ok_pushed;
+    }
+
     // Try to extend or retract the piston by one pixel.
     // If `gravity_tweaks` is true, assume that gravity is present and apply some tweaks for that.
     ExtendRetractStatus ExtendOrRetract(bool extend, bool gravity_tweaks);
@@ -201,11 +230,38 @@ struct ConnectedShipParts
 // Finds all connected parts of a ship, starting from `blocks_or_piston`.
 // `skip_piston_direction` can only be non-null if we start from a piston. Then `false` means we skip direction A of initial piston, and `true` means we skip B.
 // If `skip_piston_direction` is set, but there's a cycle that includes this piston, the execution aborts and `cant_skip_because_of_cycle` is returned.
-[[nodiscard]] ConnectedShipParts FindConnectedShipParts(std::variant<ShipPartBlocks *, ShipPartPiston *> blocks_or_piston, std::optional<bool> skip_piston_direction = {});
+// If `blocks_or_piston` is set to an entity pointer which is neither blocks nor a piston, throws.
+[[nodiscard]] ConnectedShipParts FindConnectedShipParts(std::variant<ShipPartBlocks *, ShipPartPiston *, Game::Entity *> blocks_or_piston, std::optional<bool> skip_piston_direction = {});
+
+struct PushAction
+{
+    // This should be initially set to the blocks we're starting with.
+    ConnectedShipParts all_pushed_parts;
+
+    // This gets set to true if we pushed at least something in addition to ourselves.
+    // The value only makes sense if `CollideShipParts` returned false.
+    bool at_least_one_pushed = false;
+};
+struct PushParams
+{
+    PushAction *result = nullptr;
+
+    // If this returns false for an entity we're trying to push, the push fails.
+    // If you want to blacklist a ship, you need to blacklist all its components yourself.
+    DynamicSolidTree::EntityFilterFunc allowed_entities;
+};
 
 // Checks collision for ship `parts` at `offset`, against `map` and/or `tree`.
 // Both maps and the tree is optional.
-[[nodiscard]] bool CollideShipParts(const ConnectedShipParts &parts, ivec2 offset, const MapObject *map, const DynamicSolidTree *tree, std::function<bool(const Game::Entity &e)> entity_filter = nullptr);
+// If `entity_filter` is specified and returns false, that entity is ignored.
+// If `push` is specified, will try to push entities along, and return false on success.
+//   Then, on success, it will be updated with a list of all things you need to push. Move them, instead of `parts`.
+[[nodiscard]] bool CollideShipParts(
+    const ConnectedShipParts &parts, ivec2 offset,
+    const MapObject *map, const DynamicSolidTree *tree,
+    DynamicSolidTree::EntityFilterFunc entity_filter = nullptr,
+    const PushParams *push = nullptr
+);
 
 // Moves the `parts` by the `offset`, and updates their AABB boxes.
 void MoveShipParts(const ConnectedShipParts &parts, ivec2 offset);

@@ -1,6 +1,10 @@
 #include "ship.h"
 
-bool DynamicSolidTree::BoxCollisionTest(irect2 box, std::function<bool(const Game::Entity &e)> entity_filter) const
+bool DynamicSolidTree::BoxCollisionTest(
+    irect2 box,
+    EntityFilterFunc entity_filter,
+    EntityCallbackFunc entity_callback
+) const
 {
     return aabb_tree.CollideAabb(box, [&](Tree::NodeIndex node_index)
     {
@@ -8,11 +12,23 @@ bool DynamicSolidTree::BoxCollisionTest(irect2 box, std::function<bool(const Gam
         if (entity_filter && !entity_filter(e))
             return false;
 
-        return e.get<DynamicSolid>().BoxCollisionTest(box);
+        auto Collide = [&](ivec2 offset)
+        {
+            return e.get<DynamicSolid>().BoxCollisionTest(box - offset);
+        };
+        if (entity_callback)
+            return entity_callback(e, Collide);
+        else
+            return Collide(ivec2{});
     });
 }
 
-bool DynamicSolidTree::ShipBlocksCollisionTest(const ShipPartBlocks &ship, ivec2 ship_offset, std::function<bool(const Game::Entity &e)> entity_filter) const
+bool DynamicSolidTree::ShipBlocksCollisionTest(
+    const ShipPartBlocks &ship,
+    ivec2 ship_offset,
+    EntityFilterFunc entity_filter,
+    EntityCallbackFunc entity_callback
+) const
 {
     return aabb_tree.CollideAabb(ship.CalculateRect() + ship_offset, [&](Tree::NodeIndex node_index)
     {
@@ -20,7 +36,14 @@ bool DynamicSolidTree::ShipBlocksCollisionTest(const ShipPartBlocks &ship, ivec2
         if (entity_filter && !entity_filter(e))
             return false;
 
-        return e.get<DynamicSolid>().ShipBlocksCollisionTest(ship, ship_offset);
+        auto Collide = [&](ivec2 offset)
+        {
+            return e.get<DynamicSolid>().ShipBlocksCollisionTest(ship, ship_offset - offset);
+        };
+        if (entity_callback)
+            return entity_callback(e, Collide);
+        else
+            return Collide(ivec2{});
     });
 }
 
@@ -80,6 +103,9 @@ ShipPartPiston::ExtendRetractStatus ShipPartPiston::ExtendOrRetract(bool extend,
     ConnectedShipParts parts_a = FindConnectedShipParts(this, true);
     ConnectedShipParts parts_b = FindConnectedShipParts(this, false);
 
+    if (parts_a.cant_skip_because_of_cycle || parts_b.cant_skip_because_of_cycle)
+        return ExtendRetractStatus::cycle;
+
     // Those don't touch `entity_ids`, which is exactly what we want here.
     parts_a.pistons.erase(this);
     parts_b.pistons.erase(this);
@@ -90,8 +116,13 @@ ShipPartPiston::ExtendRetractStatus ShipPartPiston::ExtendOrRetract(bool extend,
     ivec2 offset_a = ivec2::axis(is_vertical, extend ? -1 : 1);
     ivec2 offset_b = ivec2::axis(is_vertical, extend ? 1 : -1);
 
-    bool can_move_a = !CollideShipParts(parts_a, offset_a, map, tree, parts_a.LambdaNoSuchEntityHere());
-    bool can_move_b = !CollideShipParts(parts_b, offset_b, map, tree, parts_b.LambdaNoSuchEntityHere());
+    PushAction push_program_a;
+    PushAction push_program_b;
+    PushParams push_params_a{.result = &push_program_a, .allowed_entities = parts_b.LambdaNoSuchEntityHere()};
+    PushParams push_params_b{.result = &push_program_b, .allowed_entities = parts_a.LambdaNoSuchEntityHere()};
+
+    bool can_move_a = !CollideShipParts(parts_a, offset_a, map, tree, nullptr, &push_params_a);
+    bool can_move_b = !CollideShipParts(parts_b, offset_b, map, tree, nullptr, &push_params_b);
 
     bool ground_a = false;
     bool ground_b = false;
@@ -100,31 +131,32 @@ ShipPartPiston::ExtendRetractStatus ShipPartPiston::ExtendOrRetract(bool extend,
     {
         ivec2 gravity(0,1);
 
-        // Need the same lambda for both.
+        // Need to exclude both sets for both calls.
         // Imagine if A rubs the ground, but B rubs only A. If the lambdas were different,
         // they'd both have ground flags, which is wrong. Only A should have it in this case.
-        auto lambda = [a = parts_a.LambdaNoSuchEntityHere(), b = parts_b.LambdaNoSuchEntityHere()](const Game::Entity &e)
-        {
-            return a(e) && b(e);
-        };
-        ground_a = offset_a == gravity ? !can_move_a : CollideShipParts(parts_a, gravity, map, tree, lambda);
-        ground_b = offset_b == gravity ? !can_move_b : CollideShipParts(parts_b, gravity, map, tree, lambda);
+        ground_a = offset_a == gravity ? !can_move_a : CollideShipParts(parts_a, gravity, map, tree, parts_b.LambdaNoSuchEntityHere());
+        ground_b = offset_b == gravity ? !can_move_b : CollideShipParts(parts_b, gravity, map, tree, parts_a.LambdaNoSuchEntityHere());
     }
 
     if (!can_move_a && !can_move_b)
         return ExtendRetractStatus::stuck;
 
-    bool move_b = !can_move_a || (can_move_b && (ground_a > ground_b || (ground_a == ground_b && dir_flip_flop)));
+    bool move_b = false;
+    if (can_move_a != can_move_b)
+        move_b = can_move_b;
+    else if (ground_a != ground_b)
+        move_b = ground_a;
+    else if (push_program_a.at_least_one_pushed != push_program_b.at_least_one_pushed)
+        move_b = push_program_a.at_least_one_pushed;
+    else
+        move_b = dir_flip_flop;
+
     dir_flip_flop = !dir_flip_flop;
 
-    // Force move A when B sits on the floor.
-    if (is_vertical && !extend && CollideShipParts(parts_b, -offset_b, map, tree, parts_b.LambdaNoSuchEntityHere()))
-        move_b = false;
-
     if (move_b)
-        MoveShipParts(parts_b, offset_b);
+        MoveShipParts(push_program_b.at_least_one_pushed ? push_program_b.all_pushed_parts : parts_b, offset_b);
     else
-        MoveShipParts(parts_a, offset_a);
+        MoveShipParts(push_program_a.at_least_one_pushed ? push_program_a.all_pushed_parts : parts_a, offset_a);
 
     // We exclude this piston from `parts_{a,b}`, so we need to manually update it.
     UpdateAabb();
@@ -322,7 +354,7 @@ void DecomposeToComponentsAndDelete(ShipPartBlocks &self)
     game.destroy(self);
 }
 
-ConnectedShipParts FindConnectedShipParts(std::variant<ShipPartBlocks *, ShipPartPiston *> blocks_or_piston, std::optional<bool> skip_piston_direction)
+ConnectedShipParts FindConnectedShipParts(std::variant<ShipPartBlocks *, ShipPartPiston *, Game::Entity *> blocks_or_piston, std::optional<bool> skip_piston_direction)
 {
     ConnectedShipParts ret;
 
@@ -388,31 +420,92 @@ ConnectedShipParts FindConnectedShipParts(std::variant<ShipPartBlocks *, ShipPar
         }
     };
 
+    auto StartWithBlocks = [&](ShipPartBlocks *blocks)
+    {
+        ASSERT(!skip_piston_direction, "Can't specify `skip_piston_direction` when starting from `ShipPartBlocks`.");
+        HandleBlocks(HandleBlocks, HandlePiston, *blocks, dynamic_cast<Game::Entity &>(*blocks).id(), nullptr);
+    };
+    auto StartWithPiston = [&](ShipPartPiston *piston)
+    {
+        if (skip_piston_direction)
+            half_skipped_piston = piston;
+        HandlePiston(HandleBlocks, HandlePiston, *piston, dynamic_cast<Game::Entity &>(*piston).id(), nullptr);
+    };
+
     std::visit(Meta::overload{
-        [&](ShipPartBlocks *blocks)
+        StartWithBlocks,
+        StartWithPiston,
+        [&](Game::Entity *e)
         {
-            ASSERT(!skip_piston_direction, "Can't specify `skip_piston_direction` when starting from `ShipPartBlocks`.");
-            HandleBlocks(HandleBlocks, HandlePiston, *blocks, dynamic_cast<Game::Entity &>(*blocks).id(), nullptr);
-        },
-        [&](ShipPartPiston *piston)
-        {
-            if (skip_piston_direction)
-                half_skipped_piston = piston;
-            HandlePiston(HandleBlocks, HandlePiston, *piston, dynamic_cast<Game::Entity &>(*piston).id(), nullptr);
+            if (auto blocks = e->get_opt<ShipPartBlocks>())
+                StartWithBlocks(blocks);
+            else if (auto piston = e->get_opt<ShipPartPiston>())
+                StartWithPiston(piston);
         },
     }, blocks_or_piston);
 
     return ret;
 }
 
-bool CollideShipParts(const ConnectedShipParts &parts, ivec2 offset, const MapObject *map, const DynamicSolidTree *tree, std::function<bool(const Game::Entity &e)> entity_filter)
+bool CollideShipParts(
+    const ConnectedShipParts &parts, ivec2 offset,
+    const MapObject *map, const DynamicSolidTree *tree,
+    DynamicSolidTree::EntityFilterFunc entity_filter,
+    const PushParams *push
+)
 {
+    auto entity_filter_excluding_self = [next_filter = entity_filter, &parts](const Game::Entity &e)
+    {
+        return (!next_filter || next_filter(e)) && !parts.entity_ids.contains(e.id());
+    };
+
+    DynamicSolidTree::EntityCallbackFunc entity_callback;
+    if (push)
+    {
+        push->result->all_pushed_parts.blocks.insert(parts.blocks.begin(), parts.blocks.end());
+        push->result->all_pushed_parts.pistons.insert(parts.pistons.begin(), parts.pistons.end());
+        push->result->all_pushed_parts.entity_ids.insert(parts.entity_ids.begin(), parts.entity_ids.end());
+
+        entity_callback = [&](Game::Entity &e, std::function<bool(ivec2 offset)> collide) -> bool
+        {
+            if (push->result->all_pushed_parts.entity_ids.contains(e.id()))
+            {
+                bool ret = collide(offset); // That entity was already pushed, just use its new position.
+                if (ret)
+                    std::cout << "Failed because of: " << e.id().get_value() << '\n';
+                return ret;
+            }
+
+            // That entity wasn't pushed yet.
+            bool ret = collide(ivec2{});
+            if (ret)
+            {
+                if (push->allowed_entities && !push->allowed_entities(e))
+                    return true; // We're not allowed to move this.
+
+                if (collide(offset))
+                    return true; // Even if that entity moved, we still wouldn't be able to move.
+
+                auto parts = FindConnectedShipParts(&e);
+
+                ret = CollideShipParts(parts, offset, map, tree, entity_filter, push);
+                if (!ret)
+                    push->result->at_least_one_pushed = true;
+                return ret;
+            }
+            else
+            {
+                return false;
+            }
+        };
+    }
+
     for (const auto &blocks : parts.blocks)
     {
         if (map && blocks->map.CollidesWithMap(map->map, blocks->pos + offset - map->pos))
             return true;
 
-        if (tree && tree->ShipBlocksCollisionTest(*blocks, offset, entity_filter))
+        if (tree && tree->ShipBlocksCollisionTest(*blocks, offset, entity_filter_excluding_self, entity_callback))
             return true;
     }
 
@@ -421,7 +514,7 @@ bool CollideShipParts(const ConnectedShipParts &parts, ivec2 offset, const MapOb
         if (map && map->map.CollidesWithBox(piston->last_rect + offset - map->pos))
             return true;
 
-        if (tree && tree->BoxCollisionTest(piston->last_rect + offset, entity_filter))
+        if (tree && tree->BoxCollisionTest(piston->last_rect + offset, entity_filter_excluding_self, entity_callback))
             return true;
     }
 
