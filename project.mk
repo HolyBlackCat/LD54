@@ -61,6 +61,9 @@ $(call ProjectSetting,cxxflags,-DDOCTEST_CONFIG_DISABLE)
 $(call ProjectSetting,pch,$(_pch_rules))
 $(call ProjectSetting,libs,*)
 $(call ProjectSetting,bad_lib_flags,-Dmain=%>>>-DIMP_ENTRY_POINT_OVERRIDE=%)
+ifeq ($(TARGET_OS),windows)
+$(call ProjectSetting,sources,assets/_icon.ico)
+endif
 
 $(call Project,exe,tests)
 $(call ProjectSetting,source_dirs,src)
