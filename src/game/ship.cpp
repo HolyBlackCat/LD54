@@ -363,7 +363,8 @@ void DecomposeToComponentsAndDelete(ShipPartBlocks &self, std::function<void(Shi
     {
         for (const auto &elem : queued_piston.second)
         {
-            ASSERT(elem.block_b, "Why do we have an unfinished piston?");
+            if (!elem.block_b)
+                continue;
 
             auto &new_piston = game.create<ShipPartPiston>();
             game.link<"pistons", "a">(*elem.block_a, new_piston);
